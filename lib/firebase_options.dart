@@ -63,6 +63,6 @@ class DefaultFirebaseOptions {
     messagingSenderId: '134644525634',
     projectId: 'anmka-stp',
     storageBucket: 'anmka-stp.firebasestorage.app',
-    iosBundleId: 'com.anmka.stp',
+    iosBundleId: 'com.anmka.stpnew',
   );
 }

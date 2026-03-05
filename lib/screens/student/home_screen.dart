@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -7,6 +8,7 @@ import 'package:skeletonizer/skeletonizer.dart';
 import '../../core/design/app_colors.dart';
 import '../../core/design/app_radius.dart';
 import '../../core/navigation/route_names.dart';
+import '../../core/api/api_endpoints.dart';
 import '../../widgets/bottom_nav.dart';
 import '../../widgets/premium_course_card.dart';
 import '../../services/home_service.dart';
@@ -68,9 +70,28 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       // Load user profile if logged in
       try {
         final profile = await ProfileService.instance.getProfile();
+        if (kDebugMode) {
+          print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+          print('🖼️ HOME SCREEN - PROFILE AVATAR');
+          print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+          print('Profile avatar raw: ${profile['avatar']}');
+          print('Profile avatar type: ${profile['avatar']?.runtimeType}');
+          if (profile['avatar'] != null) {
+            final avatarUrl = ApiEndpoints.getImageUrl(profile['avatar']?.toString());
+            print('Profile avatar URL: $avatarUrl');
+            print('Avatar URL length: ${avatarUrl.length}');
+            print('Avatar URL is empty: ${avatarUrl.isEmpty}');
+          } else {
+            print('⚠️ Profile avatar is null');
+          }
+          print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        }
         setState(() => _userProfile = profile);
       } catch (e) {
         // User might not be logged in, continue
+        if (kDebugMode) {
+          print('❌ Error loading profile in home screen: $e');
+        }
       }
 
       // Load notifications count if logged in
@@ -432,37 +453,72 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     // Student Avatar and welcome
-                    Row(
-                      children: [
-                        // Student Avatar instead of logo
-                        Container(
-                          width: 52,
-                          height: 52,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: Colors.white.withOpacity(0.4),
-                              width: 2,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.2),
-                                blurRadius: 10,
-                                offset: const Offset(0, 4),
+                    Expanded(
+                      child: Row(
+                        children: [
+                          // Student Avatar instead of logo
+                          Container(
+                            width: 52,
+                            height: 52,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: Colors.white.withOpacity(0.4),
+                                width: 2,
                               ),
-                            ],
-                          ),
-                          child: ClipOval(
-                            child: _userProfile?['avatar'] != null
-                                ? Image.network(
-                                    _userProfile!['avatar']?.toString() ?? '',
-                                    fit: BoxFit.cover,
-                                    errorBuilder:
-                                        (context, error, stackTrace) =>
-                                            Image.asset(
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.2),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: ClipOval(
+                              child: _userProfile?['avatar'] != null
+                                  ? Image.network(
+                                      ApiEndpoints.getImageUrl(
+                                        _userProfile!['avatar']?.toString(),
+                                      ),
+                                      fit: BoxFit.cover,
+                                      loadingBuilder: (context, child, loadingProgress) {
+                                        if (loadingProgress == null) return child;
+                                        return Container(
+                                          color: Colors.white,
+                                          child: const Center(
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              color: AppColors.purple,
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                      errorBuilder: (context, error, stackTrace) {
+                                        if (kDebugMode) {
+                                          print('❌ Error loading avatar image: $error');
+                                          print('   Avatar URL: ${ApiEndpoints.getImageUrl(_userProfile!['avatar']?.toString())}');
+                                          print('   Stack trace: $stackTrace');
+                                        }
+                                        return Image.asset(
+                                          'assets/images/student-avatar.png',
+                                          fit: BoxFit.cover,
+                                          errorBuilder: (_, __, ___) => Container(
+                                            color: Colors.white,
+                                            child: const Icon(
+                                              Icons.person,
+                                              color: AppColors.purple,
+                                              size: 28,
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                    )
+                                  : Image.asset(
                                       'assets/images/student-avatar.png',
                                       fit: BoxFit.cover,
-                                      errorBuilder: (_, __, ___) => Container(
+                                      errorBuilder:
+                                          (context, error, stackTrace) =>
+                                              Container(
                                         color: Colors.white,
                                         child: const Icon(
                                           Icons.person,
@@ -471,68 +527,65 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                         ),
                                       ),
                                     ),
-                                  )
-                                : Image.asset(
-                                    'assets/images/student-avatar.png',
-                                    fit: BoxFit.cover,
-                                    errorBuilder:
-                                        (context, error, stackTrace) =>
-                                            Container(
-                                      color: Colors.white,
-                                      child: const Icon(
-                                        Icons.person,
-                                        color: AppColors.purple,
-                                        size: 28,
-                                      ),
-                                    ),
-                                  ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              AppLocalizations.of(context)!.welcome(
-                                  _userProfile?['name']?.toString() ??
-                                      AppLocalizations.of(context)!.visitor),
-                              style: GoogleFonts.cairo(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
                             ),
-                            Row(
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
                               children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 8, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withOpacity(0.2),
-                                    borderRadius: BorderRadius.circular(12),
+                                Text(
+                                  AppLocalizations.of(context)!.welcome(
+                                      _userProfile?['name']?.toString() ??
+                                          AppLocalizations.of(context)!.visitor),
+                                  style: GoogleFonts.cairo(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
                                   ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const Icon(Icons.star,
-                                          color: Colors.amber, size: 14),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        AppLocalizations.of(context)!
-                                            .excellentStudent,
-                                        style: GoogleFonts.cairo(
-                                          fontSize: 11,
-                                          color: Colors.white.withOpacity(0.9),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                Row(
+                                  children: [
+                                    Flexible(
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 8, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white.withOpacity(0.2),
+                                          borderRadius: BorderRadius.circular(12),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            const Icon(Icons.star,
+                                                color: Colors.amber, size: 14),
+                                            const SizedBox(width: 4),
+                                            Flexible(
+                                              child: Text(
+                                                AppLocalizations.of(context)!
+                                                    .excellentStudent,
+                                                style: GoogleFonts.cairo(
+                                                  fontSize: 11,
+                                                  color: Colors.white.withOpacity(0.9),
+                                                ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       ),
-                                    ],
-                                  ),
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
-                          ],
-                        ),
-                      ],
+                          ),
+                        ],
+                      ),
                     ),
                     // Actions
                     Row(
@@ -652,6 +705,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 const Icon(Icons.tune_rounded, color: Colors.white, size: 18),
           ),
           border: InputBorder.none,
+          enabledBorder: InputBorder.none,
+          focusedBorder: InputBorder.none,
+          filled: false,
           contentPadding:
               const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
         ),

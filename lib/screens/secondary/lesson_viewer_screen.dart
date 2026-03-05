@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:developer';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
@@ -12,8 +13,9 @@ import 'package:webview_flutter/webview_flutter.dart';
 import '../../core/design/app_colors.dart';
 import '../../core/navigation/route_names.dart';
 import '../../services/courses_service.dart';
-import '../../services/profile_service.dart';
 import '../../services/token_storage_service.dart';
+import '../../services/video_download_service.dart';
+import '../../services/youtube_video_service.dart';
 
 /// Lesson Viewer Screen - Modern & Eye-Friendly Design
 class LessonViewerScreen extends StatefulWidget {
@@ -34,16 +36,40 @@ class _LessonViewerScreenState extends State<LessonViewerScreen> {
   bool _useWebViewFallback = false;
   Map<String, dynamic>? _lessonContent;
   File? _tempVideoFile;
-  Map<String, dynamic>? _userProfile;
+  final VideoDownloadService _downloadService = VideoDownloadService();
+  bool _isDownloading = false;
+  int _downloadProgress = 0;
+  bool _isDownloaded = false;
 
   @override
   void initState() {
     super.initState();
+    _initializeDownloadService();
     _loadLessonContent().then((_) {
       // Initialize video after content is loaded (or failed)
       // This ensures we can use video data from the API response
       _initializeVideo();
+      _checkIfDownloaded();
     });
+  }
+
+  Future<void> _initializeDownloadService() async {
+    await _downloadService.initialize();
+  }
+
+  Future<void> _checkIfDownloaded() async {
+    final lesson = widget.lesson;
+    if (lesson == null) return;
+
+    final lessonId = lesson['id']?.toString();
+    if (lessonId == null || lessonId.isEmpty) return;
+
+    final isDownloaded = await _downloadService.isVideoDownloaded(lessonId);
+    if (mounted) {
+      setState(() {
+        _isDownloaded = isDownloaded;
+      });
+    }
   }
 
   Future<void> _loadLessonContent() async {
@@ -54,12 +80,7 @@ class _LessonViewerScreenState extends State<LessonViewerScreen> {
       });
       return;
     }
-    try {
-      final profile = await ProfileService.instance.getProfile();
-      setState(() => _userProfile = profile);
-    } catch (e) {
-      // User might not be logged in, continue
-    }
+
     // Get courseId from widget or extract from lesson
     String? courseId = widget.courseId;
     if (courseId == null || courseId.isEmpty) {
@@ -208,18 +229,19 @@ class _LessonViewerScreenState extends State<LessonViewerScreen> {
             podPlayerConfig: const PodPlayerConfig(
               autoPlay: false,
               isLooping: false,
-              // تعطيل fullscreen الافتراضي
-              wakelockEnabled: true,
             ),
-          );
-
-// ثم أضف listener للـ fullscreen
-          _controller!.addListener(() {
-            if (_controller!.isFullScreen) {
-              // عند الدخول في fullscreen، أضف الـ watermark
-              _showFullScreenWithWatermark();
-            }
-          });
+          )..initialise().then((_) {
+              if (mounted) {
+                setState(() => _isVideoLoading = false);
+              }
+            }).catchError((error) {
+              if (kDebugMode) {
+                print('❌ Error initializing YouTube video: $error');
+              }
+              if (mounted) {
+                setState(() => _isVideoLoading = false);
+              }
+            });
         } else {
           // Direct video URL from server - use pod_player with network
           if (kDebugMode) {
@@ -268,39 +290,6 @@ class _LessonViewerScreenState extends State<LessonViewerScreen> {
         setState(() => _isVideoLoading = false);
       }
     }
-  }
-
-  void _showFullScreenWithWatermark() {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => Scaffold(
-          backgroundColor: Colors.black,
-          body: Stack(
-            children: [
-              Center(
-                child: PodVideoPlayer(
-                  controller: _controller!,
-                  videoAspectRatio: 16 / 9,
-                ),
-              ),
-              // Watermark in fullscreen
-              _buildWatermarkOverlay(),
-              // Close button
-              SafeArea(
-                child: Align(
-                  alignment: Alignment.topRight,
-                  child: IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white),
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        fullscreenDialog: true,
-      ),
-    );
   }
 
   /// Initialize direct video playback using pod_player
@@ -861,30 +850,6 @@ class _LessonViewerScreenState extends State<LessonViewerScreen> {
     );
   }
 
-  Widget _buildWatermarkOverlay() {
-    return Positioned.fill(
-      child: IgnorePointer(
-        child: Center(
-          child: Transform.rotate(
-            angle: -0.5,
-            child: Opacity(
-              opacity: 0.2,
-              child: Text(
-                _userProfile?['name'] ?? 'اسم المستخدم',
-                style: GoogleFonts.cairo(
-                  fontSize: 40,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black,
-                  letterSpacing: 2,
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildVideoSection(Map<String, dynamic> lesson) {
     return Container(
       color: Colors.black,
@@ -945,49 +910,47 @@ class _LessonViewerScreenState extends State<LessonViewerScreen> {
           // Video Player
           SizedBox(
             height: 220,
-            child: Stack(children: [
-              _isVideoLoading
-                  ? Container(
-                      color: Colors.black,
-                      child: const Center(
-                        child: CircularProgressIndicator(
-                          color: AppColors.purple,
-                        ),
+            child: _isVideoLoading
+                ? Container(
+                    color: Colors.black,
+                    child: const Center(
+                      child: CircularProgressIndicator(
+                        color: AppColors.purple,
                       ),
-                    )
-                  : _controller != null
-                      ? PodVideoPlayer(
-                          controller: _controller!,
-                          videoAspectRatio: 16 / 9,
-                          podProgressBarConfig: const PodProgressBarConfig(
-                            playingBarColor: AppColors.purple,
-                            circleHandlerColor: AppColors.purple,
-                            bufferedBarColor: Colors.white30,
-                          ),
-                        )
-                      : _useWebViewFallback && _webViewController != null
-                          ? WebViewWidget(controller: _webViewController!)
-                          : Container(
-                              color: Colors.black,
-                              child: Center(
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    const Icon(Icons.error_outline,
-                                        color: Colors.white54, size: 48),
-                                    const SizedBox(height: 12),
-                                    Text(
-                                      'لا يمكن تحميل الفيديو',
-                                      style: GoogleFonts.cairo(
-                                        color: Colors.white54,
-                                        fontSize: 14,
-                                      ),
+                    ),
+                  )
+                : _controller != null
+                    ? PodVideoPlayer(
+                        controller: _controller!,
+                        videoAspectRatio: 16 / 9,
+                        podProgressBarConfig: const PodProgressBarConfig(
+                          playingBarColor: AppColors.purple,
+                          circleHandlerColor: AppColors.purple,
+                          bufferedBarColor: Colors.white30,
+                        ),
+                      )
+                    : _useWebViewFallback && _webViewController != null
+                        ? WebViewWidget(controller: _webViewController!)
+                        : Container(
+                            color: Colors.black,
+                            child: Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Icon(Icons.error_outline,
+                                      color: Colors.white54, size: 48),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    'لا يمكن تحميل الفيديو',
+                                    style: GoogleFonts.cairo(
+                                      color: Colors.white54,
+                                      fontSize: 14,
                                     ),
-                                  ],
-                                ),
+                                  ),
+                                ],
                               ),
                             ),
-            ]),
+                          ),
           ),
         ],
       ),
@@ -1101,6 +1064,116 @@ class _LessonViewerScreenState extends State<LessonViewerScreen> {
                             height: 1.7,
                           ),
                         ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // Download Card
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.04),
+                    blurRadius: 20,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: AppColors.purple.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(Icons.download_rounded,
+                            color: AppColors.purple, size: 20),
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        'تحميل للعرض بدون إنترنت',
+                        style: GoogleFonts.cairo(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.foreground,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  if (_isDownloading)
+                    Column(
+                      children: [
+                        LinearProgressIndicator(
+                          value: _downloadProgress / 100,
+                          backgroundColor: Colors.grey[200],
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            AppColors.purple,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'جاري التحميل: $_downloadProgress%',
+                          style: GoogleFonts.cairo(
+                            fontSize: 14,
+                            color: AppColors.mutedForeground,
+                          ),
+                        ),
+                      ],
+                    )
+                  else if (_isDownloaded)
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.green[50],
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.check_circle,
+                              color: Colors.green[600], size: 20),
+                          const SizedBox(width: 8),
+                          Text(
+                            'تم تحميل الفيديو',
+                            style: GoogleFonts.cairo(
+                              fontSize: 14,
+                              color: Colors.green[700],
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  else
+                    ElevatedButton.icon(
+                      onPressed: _handleDownload,
+                      icon: const Icon(Icons.download, color: Colors.white),
+                      label: Text(
+                        'تحميل للعرض بدون إنترنت',
+                        style: GoogleFonts.cairo(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.purple,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 24,
+                          vertical: 12,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -1304,6 +1377,215 @@ class _LessonViewerScreenState extends State<LessonViewerScreen> {
         );
       }).toList(),
     );
+  }
+
+  Future<void> _handleDownload() async {
+    final lesson = widget.lesson;
+    if (lesson == null) return;
+
+    final lessonId = lesson['id']?.toString();
+    final courseId = widget.courseId ?? lesson['course_id']?.toString();
+    final title = lesson['title']?.toString() ?? 'فيديو';
+    final description = lesson['description']?.toString() ?? '';
+
+    if (lessonId == null || courseId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'لا يمكن تحميل هذا الفيديو',
+            style: GoogleFonts.cairo(),
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    // التحقق من الصلاحيات
+    final hasPermission = await _downloadService.hasStoragePermission();
+    if (!hasPermission) {
+      final granted = await _downloadService.requestPermission();
+      if (!granted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'يجب منح صلاحيات التخزين لتحميل الفيديوهات',
+              style: GoogleFonts.cairo(),
+            ),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+    }
+
+    // الحصول على رابط الفيديو (نفس منطق التشغيل، مع تنظيف الرابط)
+    String? rawVideoUrl = _lessonContent?['video']?['url']?.toString() ??
+        lesson['video_url']?.toString() ??
+        lesson['video']?['url']?.toString();
+
+    final videoUrl = _cleanVideoUrl(rawVideoUrl);
+
+    if (videoUrl == null || videoUrl.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'لا يوجد رابط فيديو للتحميل',
+            style: GoogleFonts.cairo(),
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _isDownloading = true;
+      _downloadProgress = 0;
+    });
+
+    try {
+      // الحصول على عنوان الكورس
+      String? courseTitle;
+      try {
+        final courseDetails =
+            await CoursesService.instance.getCourseDetails(courseId);
+        courseTitle = courseDetails['title']?.toString();
+      } catch (e) {
+        print('Error getting course title: $e');
+      }
+      if (videoUrl.contains('youtube.com') || videoUrl.contains('youtu.be')) {
+        // Build fileName with course title for better organization
+        final safeCourseTitle = (courseTitle ?? 'course_$courseId')
+            .replaceAll(RegExp(r'[\\/:*?"<>|]'), '_')
+            .trim();
+        final safeLessonTitle =
+            title.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_').trim();
+        final fileName =
+            '${safeCourseTitle}_${safeLessonTitle}_${DateTime.now().millisecondsSinceEpoch}.mp4';
+
+        final localPath =
+            await YoutubeVideoService.instance.downloadYoutubeVideo(
+          videoUrl,
+          fileName: fileName,
+          onProgress: (progress) {
+            if (mounted) {
+              setState(() => _downloadProgress = progress);
+            }
+          },
+        );
+
+        if (localPath != null) {
+          // Save to database so it appears in Downloads screen (like server downloads)
+          // title = course title (main display), courseTitle = course for grouping
+          final videoId = await _downloadService.saveDownloadedVideoRecord(
+            lessonId: lessonId,
+            courseId: courseId,
+            title: courseTitle ?? title,
+            videoUrl: videoUrl,
+            localPath: localPath,
+            courseTitle: courseTitle ?? 'كورس $courseId',
+            description: description.isNotEmpty ? description : title,
+            durationText: lesson['duration']?.toString(),
+            videoSource: 'youtube',
+          );
+
+          if (kDebugMode && videoId != null) {
+            log('YouTube video saved to database: $videoId');
+          }
+
+          if (mounted) {
+            setState(() {
+              _isDownloading = false;
+              _isDownloaded = true;
+              _downloadProgress = 0;
+            });
+
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'تم تحميل الفيديو بنجاح',
+                  style: GoogleFonts.cairo(),
+                ),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+        } else {
+          if (mounted) {
+            setState(() {
+              _isDownloading = false;
+              _downloadProgress = 0;
+            });
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'فشل تحميل الفيديو',
+                  style: GoogleFonts.cairo(),
+                ),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        }
+        return;
+      }
+
+      final videoId = await _downloadService.downloadVideoWithManager(
+        videoUrl: videoUrl,
+        lessonId: lessonId,
+        courseId: courseId,
+        title: title,
+        courseTitle: courseTitle,
+        description: description,
+        onProgress: (progress) {
+          if (mounted) {
+            setState(() {
+              _downloadProgress = progress;
+            });
+          }
+        },
+      );
+
+      if (videoId != null) {
+        if (mounted) {
+          setState(() {
+            _isDownloading = false;
+            _isDownloaded = true;
+            _downloadProgress = 0;
+          });
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'تم تحميل الفيديو بنجاح',
+                style: GoogleFonts.cairo(),
+              ),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } else {
+        throw Exception('فشل تحميل الفيديو');
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isDownloading = false;
+          _downloadProgress = 0;
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'خطأ في تحميل الفيديو: ${e.toString().replaceFirst('Exception: ', '')}',
+              style: GoogleFonts.cairo(),
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   Widget _buildResourceItem(

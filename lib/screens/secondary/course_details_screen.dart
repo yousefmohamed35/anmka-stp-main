@@ -11,6 +11,7 @@ import '../../services/courses_service.dart';
 import '../../services/exams_service.dart';
 import '../../core/api/api_client.dart';
 import '../../services/wishlist_service.dart';
+import '../../services/profile_service.dart';
 
 /// Modern Course Details Screen with Beautiful UI
 class CourseDetailsScreen extends StatefulWidget {
@@ -34,6 +35,7 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen>
   bool _isLoadingExams = false;
   bool _isInWishlist = false;
   bool _isTogglingWishlist = false;
+  bool _isViewingOwnCourse = false;
 
   @override
   void initState() {
@@ -242,6 +244,7 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen>
           });
           _loadCourseExams();
           _checkWishlistStatus();
+          _checkIfViewingOwnCourse(courseDetails);
         } catch (e) {
           if (kDebugMode) {
             print(
@@ -259,17 +262,37 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen>
             _courseData = widget.course; // Fallback to provided course
             _isLoading = false;
           });
+          _checkIfViewingOwnCourse(widget.course);
         }
       } else {
         setState(() {
           _courseData = widget.course;
         });
+        _checkIfViewingOwnCourse(widget.course);
       }
     } else {
       setState(() {
         _courseData = widget.course;
       });
+      _checkIfViewingOwnCourse(widget.course);
     }
+  }
+
+  Future<void> _checkIfViewingOwnCourse(Map<String, dynamic>? course) async {
+    if (course == null) return;
+    final instructorId = course['instructor_id']?.toString() ??
+        course['instructorId']?.toString() ??
+        (course['instructor'] is Map
+            ? (course['instructor'] as Map)['id']?.toString()
+            : null);
+    if (instructorId == null || instructorId.isEmpty) return;
+    try {
+      final profile = await ProfileService.instance.getProfile();
+      final myId = profile['id']?.toString();
+      if (myId != null && myId == instructorId && mounted) {
+        setState(() => _isViewingOwnCourse = true);
+      }
+    } catch (_) {}
   }
 
   @override
@@ -1813,6 +1836,39 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen>
   }
 
   Widget _buildBottomBar(Map<String, dynamic>? course, bool isFree) {
+    if (_isViewingOwnCourse) {
+      return Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, -4),
+            ),
+          ],
+        ),
+        child: SafeArea(
+          top: false,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.school_rounded, color: AppColors.purple, size: 22),
+              const SizedBox(width: 8),
+              Text(
+                'أنت مدرب هذه الدورة',
+                style: GoogleFonts.cairo(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.purple,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -1957,6 +2013,18 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen>
     setState(() => _isEnrolling = true);
 
     try {
+      if (kDebugMode) {
+        print('═══════════════════════════════════════════════════════════');
+        print('📤 ENROLL REQUEST (enrollInCourse)');
+        print('═══════════════════════════════════════════════════════════');
+        print('Course ID: $courseId');
+        final title = course['title']?.toString();
+        if (title != null) {
+          print('Course Title: $title');
+        }
+        print('═══════════════════════════════════════════════════════════');
+      }
+
       final enrollment = await CoursesService.instance.enrollInCourse(courseId);
 
       // Print detailed response

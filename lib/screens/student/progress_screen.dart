@@ -709,94 +709,84 @@ class _ProgressScreenState extends State<ProgressScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
-            children: [
-              Container(
-                width: 48, // w-12
-                height: 48, // h-12
-                decoration: const BoxDecoration(
-                  color: AppColors.orangeLight,
-                  shape: BoxShape.circle,
-                ),
-                child: ClipOval(
-                  child: userAvatar != null && userAvatar.isNotEmpty
-                      ? Image.network(
-                          userAvatar,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) =>
-                              Image.asset(
+          Expanded(
+            child: Row(
+              children: [
+                Container(
+                  width: 48, // w-12
+                  height: 48, // h-12
+                  decoration: const BoxDecoration(
+                    color: AppColors.orangeLight,
+                    shape: BoxShape.circle,
+                  ),
+                  child: ClipOval(
+                    child: userAvatar != null && userAvatar.isNotEmpty
+                        ? Image.network(
+                            userAvatar,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) =>
+                                Image.asset(
+                              'assets/images/user-avatar.png',
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) =>
+                                  const Icon(Icons.person,
+                                      color: AppColors.purple),
+                            ),
+                          )
+                        : Image.asset(
                             'assets/images/user-avatar.png',
                             fit: BoxFit.cover,
                             errorBuilder: (context, error, stackTrace) =>
-                                const Icon(Icons.person,
-                                    color: AppColors.purple),
+                                const Icon(Icons.person, color: AppColors.purple),
                           ),
-                        )
-                      : Image.asset(
-                          'assets/images/user-avatar.png',
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) =>
-                              const Icon(Icons.person, color: AppColors.purple),
-                        ),
-                ),
-              ),
-              const SizedBox(width: 12), // gap-3
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    userName.isNotEmpty
-                        ? 'مرحباً، $userName'
-                        : AppLocalizations.of(context)!.helloJacob,
-                    style: AppTextStyles.h4(color: AppColors.foreground),
                   ),
-                  Row(
+                ),
+                const SizedBox(width: 12), // gap-3
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(
-                        Icons.flash_on,
-                        size: 16, // w-4 h-4
-                        color: AppColors.orange,
-                      ),
-                      const SizedBox(width: 4), // gap-1
                       Text(
-                        AppLocalizations.of(context)!
-                            .progressPercent(overallProgress),
-                        style: AppTextStyles.bodySmall(
-                          color: AppColors.mutedForeground,
-                        ),
+                        userName.isNotEmpty
+                            ? 'مرحباً، $userName'
+                            : AppLocalizations.of(context)!.helloJacob,
+                        style: AppTextStyles.h4(color: AppColors.foreground),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.flash_on,
+                            size: 16, // w-4 h-4
+                            color: AppColors.orange,
+                          ),
+                          const SizedBox(width: 4), // gap-1
+                          Flexible(
+                            child: Text(
+                              AppLocalizations.of(context)!
+                                  .progressPercent(overallProgress),
+                              style: AppTextStyles.bodySmall(
+                                color: AppColors.mutedForeground,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
-                ],
-              ),
-            ],
+                ),
+              ],
+            ),
           ),
-          Row(
-            children: [
-              Container(
-                width: 44, // w-11
-                height: 44, // h-11
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 4,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: const Icon(
-                  Icons.verified_user,
-                  size: 20, // w-5 h-5
-                  color: AppColors.purple,
-                ),
-              ),
-              const SizedBox(width: 8), // gap-2
-              GestureDetector(
-                onTap: () => context.push(RouteNames.notifications),
-                child: Container(
+          Flexible(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
                   width: 44, // w-11
                   height: 44, // h-11
                   decoration: BoxDecoration(
@@ -810,32 +800,56 @@ class _ProgressScreenState extends State<ProgressScreen> {
                       ),
                     ],
                   ),
-                  child: Stack(
-                    children: [
-                      const Center(
-                        child: Icon(
-                          Icons.notifications,
-                          size: 20, // w-5 h-5
-                          color: AppColors.foreground,
-                        ),
-                      ),
-                      Positioned(
-                        top: 8,
-                        right: 8,
-                        child: Container(
-                          width: 8, // w-2
-                          height: 8, // h-2
-                          decoration: const BoxDecoration(
-                            color: Colors.red,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                      ),
-                    ],
+                  child: const Icon(
+                    Icons.verified_user,
+                    size: 20, // w-5 h-5
+                    color: AppColors.purple,
                   ),
                 ),
-              ),
-            ],
+                const SizedBox(width: 8), // gap-2
+                GestureDetector(
+                  onTap: () => context.push(RouteNames.notifications),
+                  child: Container(
+                    width: 44, // w-11
+                    height: 44, // h-11
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.05),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Stack(
+                      children: [
+                        const Center(
+                          child: Icon(
+                            Icons.notifications,
+                            size: 20, // w-5 h-5
+                            color: AppColors.foreground,
+                          ),
+                        ),
+                        Positioned(
+                          top: 8,
+                          right: 8,
+                          child: Container(
+                            width: 8, // w-2
+                            height: 8, // h-2
+                            decoration: const BoxDecoration(
+                              color: Colors.red,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),

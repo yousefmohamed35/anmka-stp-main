@@ -99,6 +99,7 @@ class AuthService {
           accessToken: authResponse.token,
           refreshToken: authResponse.refreshToken,
         );
+        await TokenStorageService.instance.saveUserRole(authResponse.user.role);
 
         // Verify token was saved to cache
         print('🔍 Verifying token was saved to cache...');
@@ -149,49 +150,135 @@ class AuthService {
   Future<AuthResponse> register({
     required String name,
     required String email,
-    required String phone,
+    String? phone,
     required String password,
     required String passwordConfirmation,
     required bool acceptTerms,
-    required String studentType,
+    String role = 'student', // Default to student, can be 'instructor'
+    String? studentType, // Only required for students
   }) async {
     try {
+      // Build request body
+      final body = <String, dynamic>{
+        'name': name,
+        'email': email,
+        'password': password,
+        'role': role,
+      };
+
+      // Add phone if provided
+      if (phone != null && phone.isNotEmpty) {
+        body['phone'] = phone;
+      }
+
+      // Add student_type only for students
+      if (role == 'student' && studentType != null) {
+        // Map student_type values to API format
+        // API expects: "online" or "offline"
+        String mappedStudentType = studentType;
+        if (studentType == 'in_person') {
+          mappedStudentType = 'offline';
+        } else if (studentType == 'both') {
+          mappedStudentType = 'online'; // Default to online for "both"
+        }
+        body['student_type'] = mappedStudentType;
+      }
+
       final response = await ApiClient.instance.post(
         ApiEndpoints.register,
-        body: {
-          'name': name,
-          'email': email,
-          'phone': phone,
-          'password': password,
-          'password_confirmation': passwordConfirmation,
-          'accept_terms': acceptTerms,
-          'student_type': studentType,
-        },
+        body: body,
         requireAuth: false, // Register doesn't need auth
       );
 
+      // Print full response for debugging
+      if (kDebugMode) {
+        print('📦 Full Register Response:');
+        print('  Response: $response');
+        print('  Response Type: ${response.runtimeType}');
+        print('  Response Keys: ${response.keys.toList()}');
+        response.forEach((key, value) {
+          print('    $key: $value (${value.runtimeType})');
+        });
+      }
+
       if (response['success'] == true) {
+        // Debug: Print raw response to see structure
+        if (kDebugMode) {
+          print('🔍 Raw Register Response:');
+          print('  response keys: ${response.keys.toList()}');
+          if (response['data'] != null) {
+            final data = response['data'] as Map<String, dynamic>;
+            print('  data keys: ${data.keys.toList()}');
+            print('  token in data: ${data.containsKey('token')}');
+            final tokenStr = data['token']?.toString() ?? 'NULL';
+            final tokenPreview = tokenStr != 'NULL' && tokenStr.length > 20
+                ? '${tokenStr.substring(0, 20)}...'
+                : tokenStr;
+            print('  token value: $tokenPreview');
+            print(
+                '  refresh_token in data: ${data.containsKey('refresh_token')}');
+          }
+        }
+
+        // Check if user status is PENDING (waiting for admin approval)
+        final data = response['data'] as Map<String, dynamic>? ?? {};
+        final status = data['status'] as String?;
+
+        if (status == 'PENDING') {
+          print('⏳ Registration successful but account is PENDING approval');
+          print('  Status: $status');
+          print(
+              '  Message: ${response['message'] ?? 'في انتظار موافقة المدير'}');
+          print('  💡 Token will be provided after admin approval');
+
+          // Throw a specific exception for pending status
+          throw Exception(response['message']?.toString() ??
+              'تم إنشاء الحساب بنجاح، في انتظار موافقة المدير');
+        }
+
         final authResponse = AuthResponse.fromJson(response);
 
-        print('🔐 Registration successful - Saving tokens...');
+        print('🔐 Registration successful - Parsing tokens...');
+        print(
+            '  Token from model: ${authResponse.token.isNotEmpty ? "${authResponse.token.substring(0, authResponse.token.length > 20 ? 20 : authResponse.token.length)}..." : "EMPTY"}');
         print('  Token length: ${authResponse.token.length}');
         print('  Refresh token length: ${authResponse.refreshToken.length}');
 
-        // Save tokens to cache
+        if (authResponse.token.isEmpty) {
+          print('❌ ERROR: Token is EMPTY after parsing!');
+          print('💡 Check if API response contains token in data.token');
+          print('💡 This might be a PENDING account - check status field');
+          throw Exception(response['message']?.toString() ??
+              'تم إنشاء الحساب بنجاح، لكن لا يمكن تسجيل الدخول الآن. يرجى انتظار موافقة المدير');
+        }
+
+        // Save tokens to cache (like Dio setTokenIntoHeaderAfterLogin)
         print('💾 Saving tokens to cache...');
         await TokenStorageService.instance.saveTokens(
           accessToken: authResponse.token,
           refreshToken: authResponse.refreshToken,
         );
+        await TokenStorageService.instance.saveUserRole(authResponse.user.role);
 
-        // Verify token was cached
+        // Verify token was saved to cache
+        print('🔍 Verifying token was saved to cache...');
         final savedToken = await TokenStorageService.instance.getAccessToken();
-        if (savedToken != null &&
-            savedToken.isNotEmpty &&
-            savedToken == authResponse.token) {
-          print('✅ Token cached successfully (length: ${savedToken.length})');
+        if (savedToken != null && savedToken.isNotEmpty) {
+          if (savedToken == authResponse.token) {
+            print('✅ Token cached successfully');
+            print('  Cached token length: ${savedToken.length}');
+            print('  💡 Token is now available for all API requests');
+          } else {
+            print('❌ Token mismatch in cache!');
+            print(
+                '  Original: ${authResponse.token.substring(0, authResponse.token.length > 20 ? 20 : authResponse.token.length)}...');
+            print(
+                '  Cached: ${savedToken.substring(0, savedToken.length > 20 ? 20 : savedToken.length)}...');
+          }
         } else {
           print('❌ Token cache verification failed');
+          print('  savedToken is null: ${savedToken == null}');
+          print('  savedToken is empty: ${savedToken?.isEmpty ?? true}');
           throw Exception('Failed to cache token after registration');
         }
 
@@ -214,6 +301,65 @@ class AuthService {
           }
         } catch (_) {}
         throw Exception('فشل إنشاء الحساب. يرجى المحاولة مرة أخرى');
+      }
+      rethrow;
+    }
+  }
+
+  /// Refresh access token
+  Future<AuthResponse> refreshAccessToken() async {
+    try {
+      final refreshToken = await TokenStorageService.instance.getRefreshToken();
+      if (refreshToken == null || refreshToken.isEmpty) {
+        throw Exception('لا يوجد refresh token');
+      }
+
+      final response = await ApiClient.instance.post(
+        ApiEndpoints.refreshToken,
+        body: {
+          'refreshToken': refreshToken,
+        },
+        requireAuth: false, // Refresh doesn't need access token
+      );
+
+      if (response['success'] == true) {
+        final authResponse = AuthResponse.fromJson(response);
+
+        if (authResponse.token.isEmpty) {
+          throw Exception('Token is empty in refresh response');
+        }
+
+        // Save new tokens to cache
+        await TokenStorageService.instance.saveTokens(
+          accessToken: authResponse.token,
+          refreshToken: authResponse.refreshToken,
+        );
+
+        if (kDebugMode) {
+          print('✅ Access token refreshed successfully');
+          print('  New token length: ${authResponse.token.length}');
+        }
+
+        return authResponse;
+      } else {
+        throw Exception(response['message'] ?? 'فشل تجديد الـ access token');
+      }
+    } catch (e) {
+      if (e is ApiException) {
+        // Try to parse error message from response body
+        try {
+          final errorBody = e.message;
+          final match = RegExp(r'\{.*\}').firstMatch(errorBody);
+          if (match != null) {
+            final errorJson = jsonDecode(match.group(0)!);
+            final message = errorJson['message'] ??
+                errorJson['error'] ??
+                'فشل تجديد الـ access token';
+            throw Exception(message);
+          }
+        } catch (_) {}
+        throw Exception(
+            'فشل تجديد الـ access token. يرجى تسجيل الدخول مرة أخرى');
       }
       rethrow;
     }
@@ -370,6 +516,7 @@ class AuthService {
           accessToken: authResponse.token,
           refreshToken: authResponse.refreshToken,
         );
+        await TokenStorageService.instance.saveUserRole(authResponse.user.role);
 
         // Verify token was cached
         final savedToken = await TokenStorageService.instance.getAccessToken();
@@ -529,6 +676,7 @@ class AuthService {
           accessToken: authResponse.token,
           refreshToken: authResponse.refreshToken,
         );
+        await TokenStorageService.instance.saveUserRole(authResponse.user.role);
 
         // Verify token was cached
         final savedToken = await TokenStorageService.instance.getAccessToken();

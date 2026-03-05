@@ -89,7 +89,8 @@ class CourseCardCourses extends StatelessWidget {
                             clipBehavior: Clip.none,
                             children: List.generate(3, (index) {
                               return Positioned(
-                                right: index * 24.0, // -space-x-2 = negative spacing
+                                right: index *
+                                    24.0, // -space-x-2 = negative spacing
                                 child: Container(
                                   width: 32, // w-8
                                   height: 32, // h-8
@@ -105,8 +106,9 @@ class CourseCardCourses extends StatelessWidget {
                                     child: Image.asset(
                                       'assets/images/avatar-person.png',
                                       fit: BoxFit.cover,
-                                      errorBuilder: (context, error, stackTrace) =>
-                                          Container(
+                                      errorBuilder:
+                                          (context, error, stackTrace) =>
+                                              Container(
                                         color: AppColors.orangeLight,
                                       ),
                                     ),
@@ -204,5 +206,3 @@ class _CurvesPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
-
-

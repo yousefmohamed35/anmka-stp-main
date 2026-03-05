@@ -7,9 +7,10 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../../core/design/app_colors.dart';
 import '../../core/design/app_radius.dart';
 import '../../services/qr_code_service.dart';
+import '../../services/profile_service.dart';
 import '../../l10n/app_localizations.dart';
 
-/// Center Attendance Screen - Display QR Code for Student
+/// Center Attendance Screen - Display QR Code and Student Stats
 class CenterAttendanceScreen extends StatefulWidget {
   const CenterAttendanceScreen({super.key});
 
@@ -19,13 +20,24 @@ class CenterAttendanceScreen extends StatefulWidget {
 
 class _CenterAttendanceScreenState extends State<CenterAttendanceScreen> {
   bool _isLoading = true;
+  bool _isLoadingProfile = true;
   String? _qrCode;
   String? _error;
+  Map<String, dynamic>? _profile;
+  Map<String, dynamic>? _statistics;
 
   @override
   void initState() {
     super.initState();
-    _loadQrCode();
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    // Load both QR code and profile in parallel
+    await Future.wait([
+      _loadQrCode(),
+      _loadProfile(),
+    ]);
   }
 
   Future<void> _loadQrCode() async {
@@ -55,6 +67,31 @@ class _CenterAttendanceScreenState extends State<CenterAttendanceScreen> {
     }
   }
 
+  Future<void> _loadProfile() async {
+    setState(() {
+      _isLoadingProfile = true;
+    });
+
+    try {
+      final profile = await ProfileService.instance.getProfile();
+      if (kDebugMode) {
+        print('✅ Profile loaded: ${profile['name']}');
+      }
+      setState(() {
+        _profile = profile;
+        _statistics = profile['statistics'] as Map<String, dynamic>?;
+        _isLoadingProfile = false;
+      });
+    } catch (e) {
+      if (kDebugMode) {
+        print('❌ Error loading profile: $e');
+      }
+      setState(() {
+        _isLoadingProfile = false;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     SystemChrome.setSystemUIOverlayStyle(
@@ -66,17 +103,21 @@ class _CenterAttendanceScreenState extends State<CenterAttendanceScreen> {
 
     final l10n = AppLocalizations.of(context)!;
 
+    final enrolledCourses = _statistics?['enrolled_courses'] ?? 0;
+    final certificates = _statistics?['certificates_earned'] ?? 0;
+    final totalHours = _statistics?['total_learning_hours'] ?? 0;
+
     return Scaffold(
       backgroundColor: AppColors.beige,
       body: SafeArea(
         child: Column(
           children: [
-            // Header
-            _buildHeader(context, l10n),
+            // Header with Profile and Stats
+            _buildHeader(context, l10n, enrolledCourses, certificates, totalHours),
 
             // Content
             Expanded(
-              child: _isLoading
+              child: _isLoading || _isLoadingProfile
                   ? Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -95,7 +136,7 @@ class _CenterAttendanceScreenState extends State<CenterAttendanceScreen> {
                     )
                   : _error != null
                       ? _buildErrorState(context, l10n)
-                      : _buildQrCodeContent(context, l10n),
+                      : _buildContent(context, l10n, enrolledCourses, certificates, totalHours),
             ),
           ],
         ),
@@ -103,7 +144,13 @@ class _CenterAttendanceScreenState extends State<CenterAttendanceScreen> {
     );
   }
 
-  Widget _buildHeader(BuildContext context, AppLocalizations l10n) {
+  Widget _buildHeader(
+    BuildContext context,
+    AppLocalizations l10n,
+    int enrolledCourses,
+    int certificates,
+    int totalHours,
+  ) {
     return Container(
       decoration: BoxDecoration(
         gradient: const LinearGradient(
@@ -124,55 +171,208 @@ class _CenterAttendanceScreenState extends State<CenterAttendanceScreen> {
         ],
       ),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
-        child: Row(
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+        child: Column(
           children: [
-            GestureDetector(
-              onTap: () => context.pop(),
-              child: Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(14),
+            // Top Row with Back and Refresh
+            Row(
+              children: [
+                GestureDetector(
+                  onTap: () => context.pop(),
+                  child: Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: const Icon(
+                      Icons.arrow_back_ios_new_rounded,
+                      color: Colors.white,
+                      size: 18,
+                    ),
+                  ),
                 ),
-                child: const Icon(
-                  Icons.arrow_back_ios_new_rounded,
-                  color: Colors.white,
-                  size: 18,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    l10n.centerAttendance,
+                    style: GoogleFonts.cairo(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
                 ),
-              ),
+                GestureDetector(
+                  onTap: _loadData,
+                  child: Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: const Icon(
+                      Icons.refresh_rounded,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                l10n.centerAttendance,
-                style: GoogleFonts.cairo(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
+
+            const SizedBox(height: 20),
+
+            // Profile Section
+            Row(
+              children: [
+                // Avatar
+                Container(
+                  width: 70,
+                  height: 70,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: Colors.white.withOpacity(0.4),
+                      width: 3,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.2),
+                        blurRadius: 20,
+                        offset: const Offset(0, 10),
+                      ),
+                    ],
+                  ),
+                  child: ClipOval(
+                    child: _profile?['avatar'] != null
+                        ? Image.network(
+                            _profile!['avatar']?.toString() ?? '',
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => Container(
+                              color: Colors.white,
+                              child: const Icon(
+                                Icons.person,
+                                size: 35,
+                                color: AppColors.purple,
+                              ),
+                            ),
+                          )
+                        : Container(
+                            color: Colors.white,
+                            child: const Icon(
+                              Icons.person,
+                              size: 35,
+                              color: AppColors.purple,
+                            ),
+                          ),
+                  ),
                 ),
-              ),
+
+                const SizedBox(width: 16),
+
+                // Name and Email
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _profile?['name']?.toString() ?? l10n.user,
+                        style: GoogleFonts.cairo(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _profile?['email']?.toString() ?? '',
+                        style: GoogleFonts.cairo(
+                          fontSize: 13,
+                          color: Colors.white.withOpacity(0.8),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
-            GestureDetector(
-              onTap: _loadQrCode,
-              child: Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: const Icon(
-                  Icons.refresh_rounded,
-                  color: Colors.white,
-                  size: 20,
-                ),
+
+            const SizedBox(height: 16),
+
+            // Stats Row
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _buildStat(
+                    '$enrolledCourses',
+                    l10n.course,
+                    Icons.play_circle_fill_rounded,
+                  ),
+                  Container(
+                    width: 1,
+                    height: 25,
+                    color: Colors.white.withOpacity(0.3),
+                  ),
+                  _buildStat(
+                    '$certificates',
+                    l10n.certificates,
+                    Icons.emoji_events_rounded,
+                  ),
+                  Container(
+                    width: 1,
+                    height: 25,
+                    color: Colors.white.withOpacity(0.3),
+                  ),
+                  _buildStat(
+                    '$totalHours',
+                    l10n.hour,
+                    Icons.access_time_filled_rounded,
+                  ),
+                ],
               ),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildStat(String value, String label, IconData icon) {
+    return Column(
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 16, color: Colors.white.withOpacity(0.9)),
+            const SizedBox(width: 4),
+            Text(
+              value,
+              style: GoogleFonts.cairo(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          style: GoogleFonts.cairo(
+            fontSize: 11,
+            color: Colors.white.withOpacity(0.8),
+          ),
+        ),
+      ],
     );
   }
 
@@ -217,7 +417,7 @@ class _CenterAttendanceScreenState extends State<CenterAttendanceScreen> {
             ),
             const SizedBox(height: 24),
             ElevatedButton(
-              onPressed: _loadQrCode,
+              onPressed: _loadData,
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.purple,
                 foregroundColor: Colors.white,
@@ -243,7 +443,13 @@ class _CenterAttendanceScreenState extends State<CenterAttendanceScreen> {
     );
   }
 
-  Widget _buildQrCodeContent(BuildContext context, AppLocalizations l10n) {
+  Widget _buildContent(
+    BuildContext context,
+    AppLocalizations l10n,
+    int enrolledCourses,
+    int certificates,
+    int totalHours,
+  ) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
       physics: const BouncingScrollPhysics(),

@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import '../../core/design/app_colors.dart';
 import '../../core/design/app_text_styles.dart';
 import '../../core/design/app_radius.dart';
 import '../../core/navigation/route_names.dart';
+import '../../core/api/api_endpoints.dart';
 import '../../services/profile_service.dart';
+import '../../services/qr_code_service.dart';
 import '../../core/config/theme_provider.dart';
 import '../../l10n/app_localizations.dart';
 
@@ -26,6 +29,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _notifications = true;
   bool _emailNotifications = true;
   bool _pushNotifications = true;
+
+  // QR Code for offline students
+  String? _qrCode;
+  bool _isLoadingQrCode = false;
+  String? _qrCodeError;
 
   final ThemeProvider _themeProvider = ThemeProvider.instance;
 
@@ -54,7 +62,38 @@ class _SettingsScreenState extends State<SettingsScreen> {
     try {
       final profile = await ProfileService.instance.getProfile();
       if (kDebugMode) {
-        print('✅ Profile loaded for settings: ${profile['name']}');
+        print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        print('📋 PROFILE DATA IN SETTINGS');
+        print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        print('✅ Profile loaded successfully');
+        print('📦 Full profile data: $profile');
+        print('📦 Profile keys: ${profile.keys.toList()}');
+        print('📦 Profile type: ${profile.runtimeType}');
+        print('');
+        print('🔍 Checking name field:');
+        print('  profile["name"]: ${profile['name']}');
+        print('  profile["name"] type: ${profile['name']?.runtimeType}');
+        print('  profile["name"] toString: ${profile['name']?.toString()}');
+        print('  profile["name"] is null: ${profile['name'] == null}');
+        print(
+            '  profile["name"] isEmpty: ${profile['name']?.toString().isEmpty ?? true}');
+        print('');
+        print('🔍 Checking user field (nested):');
+        print('  profile["user"]: ${profile['user']}');
+        if (profile['user'] != null) {
+          final user = profile['user'] as Map<String, dynamic>?;
+          print('  profile["user"]["name"]: ${user?['name']}');
+        }
+        print('');
+        print('🔍 Other relevant fields:');
+        print('  profile["email"]: ${profile['email']}');
+        print('  profile["studentType"]: ${profile['studentType']}');
+        print('  profile["student_type"]: ${profile['student_type']}');
+        print(
+            '  profile["studentType"] type: ${profile['studentType']?.runtimeType}');
+        print(
+            '  profile["student_type"] type: ${profile['student_type']?.runtimeType}');
+        print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       }
       setState(() {
         _profile = profile;
@@ -64,11 +103,66 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _notifications = _pushNotifications;
         _isLoading = false;
       });
+
+      if (kDebugMode) {
+        print('✅ State updated with profile');
+        print('  _profile["name"]: ${_profile?['name']}');
+        print(
+            '  Will display: ${_profile?['name']?.toString() ?? AppLocalizations.of(context)!.user}');
+      }
+
+      // Load QR code if user is offline
+      // Check both studentType (camelCase) and student_type (snake_case)
+      final studentType = profile['studentType']?.toString() ??
+          profile['student_type']?.toString();
+      if (kDebugMode) {
+        print('🔍 Settings - Student Type Check:');
+        print('  studentType: $studentType');
+        print('  profile["studentType"]: ${profile['studentType']}');
+        print('  profile["student_type"]: ${profile['student_type']}');
+        print('  Will show QR Code: ${studentType == 'offline'}');
+      }
+      if (studentType == 'offline') {
+        _loadQrCode();
+      }
     } catch (e) {
       if (kDebugMode) {
-        print('❌ Error loading profile: $e');
+        print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        print('❌ ERROR LOADING PROFILE IN SETTINGS');
+        print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        print('Error: $e');
+        print('Error type: ${e.runtimeType}');
+        print('Stack trace: ${StackTrace.current}');
+        print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       }
       setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _loadQrCode() async {
+    setState(() {
+      _isLoadingQrCode = true;
+      _qrCodeError = null;
+    });
+
+    try {
+      final qrCode = await QrCodeService.instance.getMyQrCode();
+      if (kDebugMode) {
+        print(
+            '✅ QR code loaded in settings: ${qrCode.length > 20 ? qrCode.substring(0, 20) : qrCode}...');
+      }
+      setState(() {
+        _qrCode = qrCode;
+        _isLoadingQrCode = false;
+      });
+    } catch (e) {
+      if (kDebugMode) {
+        print('❌ Error loading QR code in settings: $e');
+      }
+      setState(() {
+        _qrCodeError = e.toString().replaceFirst('Exception: ', '');
+        _isLoadingQrCode = false;
+      });
     }
   }
 
@@ -129,6 +223,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ),
       );
+    }
+
+    // Get student type for conditional rendering
+    final studentType = _profile?['studentType']?.toString() ??
+        _profile?['student_type']?.toString();
+
+    if (kDebugMode) {
+      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      print('🔍 SETTINGS UI - BUILD METHOD - Student Type Check');
+      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      print('_profile is null: ${_profile == null}');
+      if (_profile != null) {
+        print('_profile keys: ${_profile!.keys.toList()}');
+        print('_profile["studentType"]: ${_profile!['studentType']}');
+        print('_profile["student_type"]: ${_profile!['student_type']}');
+      }
+      print('Final studentType: $studentType');
+      print('Will show QR Code section: ${studentType == 'offline'}');
+      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     }
 
     return Scaffold(
@@ -221,7 +334,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               child: ClipOval(
                                 child: _profile?['avatar'] != null
                                     ? Image.network(
-                                        _profile!['avatar']?.toString() ?? '',
+                                        ApiEndpoints.getImageUrl(
+                                          _profile!['avatar']?.toString(),
+                                        ),
                                         fit: BoxFit.cover,
                                         errorBuilder:
                                             (context, error, stackTrace) =>
@@ -312,6 +427,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         ),
                       ),
 
+                      // Chat - teacher/student messaging
+                      _buildSettingItem(
+                        icon: Icons.chat_bubble_rounded,
+                        label:
+                            Localizations.localeOf(context).languageCode == 'ar'
+                                ? 'المحادثات'
+                                : 'Chat',
+                        onTap: () => context.push(RouteNames.chatConversations),
+                      ),
+
                       // Language setting - matches React SettingItem
                       _buildSettingItem(
                         icon: Icons.language,
@@ -366,6 +491,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         icon: Icons.help,
                         label: AppLocalizations.of(context)!.helpAndSupport,
                       ),
+
+                      // QR Code Section for offline students only
+                      if (studentType == 'offline') ...[
+                        const SizedBox(height: 24),
+                        _buildQrCodeSection(),
+                      ],
 
                       const SizedBox(height: 32),
                     ],
@@ -565,6 +696,176 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildQrCodeSection() {
+    final l10n = AppLocalizations.of(context)!;
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Title
+          Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: AppColors.lavenderLight,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.qr_code_scanner_rounded,
+                  size: 20,
+                  color: AppColors.purple,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                l10n.centerAttendance,
+                style: AppTextStyles.h4(
+                  color: AppColors.foreground,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+
+          // Description
+          Text(
+            l10n.centerAttendanceDescription,
+            style: AppTextStyles.bodyMedium(
+              color: AppColors.mutedForeground,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 20),
+
+          // QR Code or Loading/Error
+          if (_isLoadingQrCode)
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: Column(
+                  children: [
+                    const CircularProgressIndicator(
+                      color: AppColors.purple,
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      l10n.loadingQrCode,
+                      style: AppTextStyles.bodySmall(
+                        color: AppColors.mutedForeground,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else if (_qrCodeError != null)
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  children: [
+                    Icon(
+                      Icons.error_outline_rounded,
+                      size: 48,
+                      color: Colors.red[600],
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      l10n.errorLoadingQrCode,
+                      style: AppTextStyles.bodyMedium(
+                        color: Colors.red[600],
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      _qrCodeError!,
+                      style: AppTextStyles.bodySmall(
+                        color: AppColors.mutedForeground,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 16),
+                    OutlinedButton.icon(
+                      onPressed: _loadQrCode,
+                      icon: const Icon(Icons.refresh_rounded, size: 18),
+                      label: Text(l10n.retry),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.purple,
+                        side: const BorderSide(color: AppColors.purple),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else if (_qrCode != null)
+            Center(
+              child: Column(
+                children: [
+                  // QR Code Container
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: AppColors.purple.withOpacity(0.2),
+                        width: 2,
+                      ),
+                    ),
+                    child: QrImageView(
+                      data: _qrCode!,
+                      version: QrVersions.auto,
+                      size: 200,
+                      backgroundColor: Colors.white,
+                      foregroundColor: AppColors.purple,
+                      errorCorrectionLevel: QrErrorCorrectLevel.H,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  // Instruction
+                  Text(
+                    l10n.scanQrCodeInstruction,
+                    style: AppTextStyles.bodySmall(
+                      color: AppColors.mutedForeground,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 12),
+                  // Refresh Button
+                  OutlinedButton.icon(
+                    onPressed: _loadQrCode,
+                    icon: const Icon(Icons.refresh_rounded, size: 18),
+                    label: Text(l10n.refreshQrCode),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.purple,
+                      side: const BorderSide(color: AppColors.purple),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
       ),
     );
   }

@@ -7,8 +7,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter_pdfview/flutter_pdfview.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/design/app_colors.dart';
-import '../../services/profile_service.dart';
 import '../../services/token_storage_service.dart';
 
 /// PDF Viewer Screen - Display PDF files using flutter_pdfview
@@ -35,7 +35,6 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
   int _totalPages = 0;
   bool _isReady = false;
   File? _tempPdfFile;
-  Map<String, dynamic>? _userProfile;
 
   @override
   void initState() {
@@ -44,12 +43,6 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
   }
 
   Future<void> _loadPdf() async {
-    try {
-      final profile = await ProfileService.instance.getProfile();
-      setState(() => _userProfile = profile);
-    } catch (e) {
-      // User might not be logged in, continue
-    }
     try {
       // Get authorization token for PDF access
       final token = await TokenStorageService.instance.getAccessToken();
@@ -463,87 +456,57 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
                           ),
                         )
                       : _localPath != null
-                          ? Stack(
-                              children: [
-                                PDFView(
-                                  filePath: _localPath!,
-                                  enableSwipe: true,
-                                  swipeHorizontal: false,
-                                  autoSpacing: true,
-                                  pageFling: true,
-                                  pageSnap: true,
-                                  defaultPage: _currentPage,
-                                  fitPolicy: FitPolicy.BOTH,
-                                  preventLinkNavigation: false,
-                                  onRender: (pages) {
-                                    if (mounted) {
-                                      setState(() {
-                                        _totalPages = pages ?? 0;
-                                        _isReady = true;
-                                      });
-                                    }
-                                  },
-                                  onError: (error) {
-                                    if (kDebugMode) {
-                                      print('❌ PDF View error: $error');
-                                    }
-                                    if (mounted) {
-                                      setState(() {
-                                        _errorMessage =
-                                            'خطأ في عرض الملف: ${error.toString()}';
-                                      });
-                                    }
-                                  },
-                                  onPageError: (page, error) {
-                                    if (kDebugMode) {
-                                      print(
-                                          '❌ PDF Page error (page $page): $error');
-                                    }
-                                  },
-                                  onViewCreated:
-                                      (PDFViewController controller) {
-                                    _pdfViewController = controller;
-                                  },
-                                  onLinkHandler: (String? uri) {
-                                    if (kDebugMode) {
-                                      print('🔗 PDF Link clicked: $uri');
-                                    }
-                                  },
-                                  onPageChanged: (int? page, int? total) {
-                                    if (mounted) {
-                                      setState(() {
-                                        _currentPage = page ?? 0;
-                                        _totalPages = total ?? 0;
-                                      });
-                                    }
-                                  },
-                                ),
-                                Positioned.fill(
-                                  child: IgnorePointer(
-                                    child: Center(
-                                      child: Transform.rotate(
-                                        angle:
-                                            -0.5, // Diagonal angle (about -30 degrees)
-                                        child: Opacity(
-                                          opacity:
-                                              0.15, // Adjust transparency (0.1 to 0.3)
-                                          child: Text(
-                                            _userProfile?['name'] ??
-                                                'الاسم غير متوفر', // Change to your text
-                                            style: GoogleFonts.cairo(
-                                              fontSize:
-                                                  60, // Adjust size as needed
-                                              fontWeight: FontWeight.bold,
-                                              color: Colors.grey.shade600,
-                                              letterSpacing: 2,
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
+                          ? PDFView(
+                              filePath: _localPath!,
+                              enableSwipe: true,
+                              swipeHorizontal: false,
+                              autoSpacing: true,
+                              pageFling: true,
+                              pageSnap: true,
+                              defaultPage: _currentPage,
+                              fitPolicy: FitPolicy.BOTH,
+                              preventLinkNavigation: false,
+                              onRender: (pages) {
+                                if (mounted) {
+                                  setState(() {
+                                    _totalPages = pages ?? 0;
+                                    _isReady = true;
+                                  });
+                                }
+                              },
+                              onError: (error) {
+                                if (kDebugMode) {
+                                  print('❌ PDF View error: $error');
+                                }
+                                if (mounted) {
+                                  setState(() {
+                                    _errorMessage =
+                                        'خطأ في عرض الملف: ${error.toString()}';
+                                  });
+                                }
+                              },
+                              onPageError: (page, error) {
+                                if (kDebugMode) {
+                                  print(
+                                      '❌ PDF Page error (page $page): $error');
+                                }
+                              },
+                              onViewCreated: (PDFViewController controller) {
+                                _pdfViewController = controller;
+                              },
+                              onLinkHandler: (String? uri) {
+                                if (kDebugMode) {
+                                  print('🔗 PDF Link clicked: $uri');
+                                }
+                              },
+                              onPageChanged: (int? page, int? total) {
+                                if (mounted) {
+                                  setState(() {
+                                    _currentPage = page ?? 0;
+                                    _totalPages = total ?? 0;
+                                  });
+                                }
+                              },
                             )
                           : Container(
                               color: const Color(0xFFF5F5F5),

@@ -22,15 +22,15 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordController = TextEditingController();
   bool _showPassword = false;
   bool _isLoading = false;
-  bool _googleLoading = false;
-  bool _appleLoading = false;
+  // bool _googleLoading = false;
+  // bool _appleLoading = false;
 
   Future<void> _handleLogin() async {
     if (_formKey.currentState!.validate()) {
       setState(() => _isLoading = true);
 
       try {
-        await AuthService.instance.login(
+        final authResponse = await AuthService.instance.login(
           emailOrPhone: _emailOrPhoneController.text.trim(),
           password: _passwordController.text,
         );
@@ -41,9 +41,14 @@ class _LoginScreenState extends State<LoginScreen> {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setBool('hasLaunched', true);
 
-        // Navigate to home
+        // Navigate by role: instructor → instructor flow, else → student flow
         if (mounted) {
-          context.go(RouteNames.home);
+          final role = authResponse.user.role.toLowerCase();
+          if (role == 'instructor' || role == 'teacher') {
+            context.go(RouteNames.instructorHome);
+          } else {
+            context.go(RouteNames.home);
+          }
         }
       } catch (e) {
         if (!mounted) return;
@@ -66,79 +71,90 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  Future<void> _handleGoogleLogin() async {
-    if (_googleLoading || _appleLoading) return;
-    setState(() {
-      _googleLoading = true;
-      _appleLoading = false;
-    });
+  // Google and Apple auth - commented out
+  // Future<void> _handleGoogleLogin() async {
+  //   if (_googleLoading || _appleLoading) return;
+  //   setState(() {
+  //     _googleLoading = true;
+  //     _appleLoading = false;
+  //   });
 
-    try {
-      await AuthService.instance.signInWithGoogle();
+  //   try {
+  //     final authResponse = await AuthService.instance.signInWithGoogle();
 
-      if (!mounted) return;
+  //     if (!mounted) return;
 
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('hasLaunched', true);
+  //     final prefs = await SharedPreferences.getInstance();
+  //     await prefs.setBool('hasLaunched', true);
 
-      if (mounted) {
-        context.go(RouteNames.home);
-      }
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            e.toString().replaceFirst('Exception: ', ''),
-            style: GoogleFonts.cairo(),
-          ),
-          backgroundColor: Colors.red,
-          duration: const Duration(seconds: 3),
-        ),
-      );
-    } finally {
-      if (mounted) {
-        setState(() => _googleLoading = false);
-      }
-    }
-  }
+  //     if (mounted) {
+  //       final role = authResponse.user.role.toLowerCase();
+  //       if (role == 'instructor' || role == 'teacher') {
+  //         context.go(RouteNames.instructorHome);
+  //       } else {
+  //         context.go(RouteNames.home);
+  //       }
+  //     }
+  //   } catch (e) {
+  //     if (!mounted) return;
+  //     ScaffoldMessenger.of(context).showSnackBar(
+  //       SnackBar(
+  //         content: Text(
+  //           e.toString().replaceFirst('Exception: ', ''),
+  //           style: GoogleFonts.cairo(),
+  //         ),
+  //         backgroundColor: Colors.red,
+  //         duration: const Duration(seconds: 3),
+  //       ),
+  //     );
+  //   } finally {
+  //     if (mounted) {
+  //       setState(() => _googleLoading = false);
+  //     }
+  //   }
+  // }
 
-  Future<void> _handleAppleLogin() async {
-    if (_appleLoading || _googleLoading) return;
-    setState(() {
-      _appleLoading = true;
-      _googleLoading = false;
-    });
+  // Future<void> _handleAppleLogin() async {
+  //   if (_appleLoading || _googleLoading) return;
+  //   setState(() {
+  //     _appleLoading = true;
+  //     _googleLoading = false;
+  //   });
 
-    try {
-      await AuthService.instance.signInWithApple();
+  //   try {
+  //     final authResponse = await AuthService.instance.signInWithApple();
 
-      if (!mounted) return;
+  //     if (!mounted) return;
 
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('hasLaunched', true);
+  //     final prefs = await SharedPreferences.getInstance();
+  //     await prefs.setBool('hasLaunched', true);
 
-      if (mounted) {
-        context.go(RouteNames.home);
-      }
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            e.toString().replaceFirst('Exception: ', ''),
-            style: GoogleFonts.cairo(),
-          ),
-          backgroundColor: Colors.red,
-          duration: const Duration(seconds: 3),
-        ),
-      );
-    } finally {
-      if (mounted) {
-        setState(() => _appleLoading = false);
-      }
-    }
-  }
+  //     if (mounted) {
+  //       final role = authResponse.user.role.toLowerCase();
+  //       if (role == 'instructor' || role == 'teacher') {
+  //         context.go(RouteNames.instructorHome);
+  //       } else {
+  //         context.go(RouteNames.home);
+  //       }
+  //     }
+  //   } catch (e) {
+  //     if (!mounted) return;
+  //     ScaffoldMessenger.of(context).showSnackBar(
+  //       SnackBar(
+  //         content: Text(
+  //           e.toString().replaceFirst('Exception: ', ''),
+  //           style: GoogleFonts.cairo(),
+  //         ),
+  //         backgroundColor: Colors.red,
+  //         duration: const Duration(seconds: 3),
+  //       ),
+  //     );
+  //   } finally {
+  //     if (mounted) {
+  //       setState(() => _appleLoading = false);
+  //     }
+  //   }
+  // }
 
   @override
   void dispose() {
@@ -350,48 +366,50 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         const SizedBox(height: 24),
 
-                        // Divider
-                        Row(
-                          children: [
-                            Expanded(child: Divider(color: Colors.grey[300])),
-                            Padding(
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 16),
-                              child: Text(
-                                AppLocalizations.of(context)!.or,
-                                style: GoogleFonts.cairo(
-                                    color: AppColors.mutedForeground),
-                              ),
-                            ),
-                            Expanded(child: Divider(color: Colors.grey[300])),
-                          ],
-                        ),
-                        const SizedBox(height: 24),
+                        // Apple and Google auth widget - commented out
+                        // // Divider
+                        // Row(
+                        //   children: [
+                        //     Expanded(child: Divider(color: Colors.grey[300])),
+                        //     Padding(
+                        //       padding:
+                        //           const EdgeInsets.symmetric(horizontal: 16),
+                        //       child: Text(
+                        //         AppLocalizations.of(context)!.or,
+                        //         style: GoogleFonts.cairo(
+                        //             color: AppColors.mutedForeground),
+                        //       ),
+                        //     ),
+                        //     Expanded(child: Divider(color: Colors.grey[300])),
+                        //   ],
+                        // ),
+                        // const SizedBox(height: 24),
 
-                        // Social Buttons
-                        Row(
-                          children: [
-                            Expanded(
-                                child: _buildSocialButton(
-                              icon: Icons.g_mobiledata_rounded,
-                              label: AppLocalizations.of(context)!.google,
-                              onPressed: (_isLoading || _appleLoading)
-                                  ? null
-                                  : _handleGoogleLogin,
-                              isLoading: _googleLoading,
-                            )),
-                            const SizedBox(width: 12),
-                            Expanded(
-                                child: _buildSocialButton(
-                              icon: Icons.apple_rounded,
-                              label: AppLocalizations.of(context)!.apple,
-                              onPressed: (_isLoading || _googleLoading)
-                                  ? null
-                                  : _handleAppleLogin,
-                              isLoading: _appleLoading,
-                            )),
-                          ],
-                        ),
+                        // // Social Buttons
+                        // Row(
+                        //   children: [
+                        //     Expanded(
+                        //         child: _buildSocialButton(
+                        //       icon: Icons.g_mobiledata_rounded,
+                        //       label: AppLocalizations.of(context)!.google,
+                        //       onPressed: (_isLoading || _appleLoading)
+                        //           ? null
+                        //           : _handleGoogleLogin,
+                        //       isLoading: _googleLoading,
+                        //     )),
+                        //     const SizedBox(width: 12),
+                        //     Expanded(
+                        //         child: _buildSocialButton(
+                        //       icon: Icons.apple_rounded,
+                        //       label: AppLocalizations.of(context)!.apple,
+                        //       onPressed: (_isLoading || _googleLoading)
+                        //           ? null
+                        //           : _handleAppleLogin,
+                        //       isLoading: _appleLoading,
+                        //     )),
+                        //   ],
+                        // ),
+
                         const SizedBox(height: 32),
 
                         // Register Link
@@ -504,58 +522,59 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Widget _buildSocialButton({
-    required IconData icon,
-    required String label,
-    VoidCallback? onPressed,
-    bool isLoading = false,
-  }) {
-    final isDisabled = onPressed == null || isLoading;
-    return Opacity(
-      opacity: isDisabled ? 0.6 : 1,
-      child: InkWell(
-        onTap: isDisabled ? null : onPressed,
-        borderRadius: BorderRadius.circular(14),
-        child: Container(
-          height: 50,
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.04),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              if (isLoading)
-                const SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: AppColors.purple,
-                  ),
-                )
-              else
-                Icon(icon, size: 24, color: AppColors.foreground),
-              const SizedBox(width: 8),
-              Text(
-                label,
-                style: GoogleFonts.cairo(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.foreground,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+  // /* Apple and Google auth widget - commented out
+  // Widget _buildSocialButton({
+  //   required IconData icon,
+  //   required String label,
+  //   VoidCallback? onPressed,
+  //   bool isLoading = false,
+  // }) {
+  //   final isDisabled = onPressed == null || isLoading;
+  //   return Opacity(
+  //     opacity: isDisabled ? 0.6 : 1,
+  //     child: InkWell(
+  //       onTap: isDisabled ? null : onPressed,
+  //       borderRadius: BorderRadius.circular(14),
+  //       child: Container(
+  //         height: 50,
+  //         decoration: BoxDecoration(
+  //           color: Colors.white,
+  //           borderRadius: BorderRadius.circular(14),
+  //           boxShadow: [
+  //             BoxShadow(
+  //               color: Colors.black.withOpacity(0.04),
+  //               blurRadius: 10,
+  //               offset: const Offset(0, 4),
+  //             ),
+  //           ],
+  //         ),
+  //         child: Row(
+  //           mainAxisAlignment: MainAxisAlignment.center,
+  //           children: [
+  //             if (isLoading)
+  //               const SizedBox(
+  //                 width: 20,
+  //                 height: 20,
+  //                 child: CircularProgressIndicator(
+  //                   strokeWidth: 2,
+  //                   color: AppColors.purple,
+  //                 ),
+  //               )
+  //             else
+  //               Icon(icon, size: 24, color: AppColors.foreground),
+  //             const SizedBox(width: 8),
+  //             Text(
+  //               label,
+  //               style: GoogleFonts.cairo(
+  //                 fontSize: 14,
+  //                 fontWeight: FontWeight.w600,
+  //                 color: AppColors.foreground,
+  //               ),
+  //             ),
+  //           ],
+  //         ),
+  //       ),
+  //     ),
+  //   );
+  // }
 }

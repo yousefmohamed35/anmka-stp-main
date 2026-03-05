@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/design/app_colors.dart';
 import '../../core/design/app_radius.dart';
 import '../../core/navigation/route_names.dart';
+import '../../core/api/api_endpoints.dart';
 import '../../widgets/bottom_nav.dart';
 import '../../services/auth_service.dart';
 import '../../services/profile_service.dart';
@@ -36,7 +37,22 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
     try {
       final profile = await ProfileService.instance.getProfile();
       if (kDebugMode) {
+        print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        print('🖼️ STUDENT DASHBOARD - PROFILE AVATAR');
+        print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        print('Profile avatar raw: ${profile['avatar']}');
+        print('Profile avatar type: ${profile['avatar']?.runtimeType}');
+        if (profile['avatar'] != null) {
+          final avatarUrl =
+              ApiEndpoints.getImageUrl(profile['avatar']?.toString());
+          print('Profile avatar URL: $avatarUrl');
+          print('Avatar URL length: ${avatarUrl.length}');
+          print('Avatar URL is empty: ${avatarUrl.isEmpty}');
+        } else {
+          print('⚠️ Profile avatar is null');
+        }
         print('✅ Profile loaded: ${profile['name']}');
+        print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       }
       setState(() {
         _profile = profile;
@@ -176,7 +192,12 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
     final totalHours = _statistics?['total_learning_hours'] ?? 0;
     final l10n = AppLocalizations.of(context)!;
 
-    final menuItems = [
+    // Get student type from profile
+    final studentType = _profile?['studentType'] as String? ??
+        _profile?['student_type'] as String?;
+
+    // Build all menu items
+    final allMenuItems = [
       {
         'icon': Icons.menu_book_rounded,
         'label': l10n.enrolledLessons,
@@ -184,6 +205,7 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
         'color': const Color(0xFF7C3AED),
         'bgColor': const Color(0xFFEDE9FE),
         'onTap': () => context.push(RouteNames.enrolled),
+        'showFor': ['online', 'offline'], // Show for both
       },
       {
         'icon': Icons.assignment_rounded,
@@ -192,6 +214,7 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
         'color': const Color(0xFFF97316),
         'bgColor': const Color(0xFFFFF7ED),
         'onTap': () => context.push(RouteNames.myExams),
+        'showFor': ['online', 'offline'], // Show for both
       },
       {
         'icon': Icons.videocam_rounded,
@@ -200,6 +223,7 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
         'color': const Color(0xFF10B981),
         'bgColor': const Color(0xFFD1FAE5),
         'onTap': () => context.push(RouteNames.liveCourses),
+        'showFor': ['online'], // Only for online
       },
       {
         'icon': Icons.emoji_events_rounded,
@@ -208,6 +232,7 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
         'color': const Color(0xFFEAB308),
         'bgColor': const Color(0xFFFEF9C3),
         'onTap': () => context.push(RouteNames.certificates),
+        'showFor': ['online', 'offline'], // Show for both
       },
       {
         'icon': Icons.download_rounded,
@@ -216,6 +241,7 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
         'color': const Color(0xFF3B82F6),
         'bgColor': const Color(0xFFDBEAFE),
         'onTap': () => context.push(RouteNames.downloads),
+        'showFor': ['online'], // Only for online
       },
       {
         'icon': Icons.qr_code_scanner_rounded,
@@ -224,6 +250,20 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
         'color': const Color(0xFF8B5CF6),
         'bgColor': const Color(0xFFF3E8FF),
         'onTap': () => context.push(RouteNames.centerAttendance),
+        'showFor': ['offline'], // Only for offline
+      },
+      {
+        'icon': Icons.chat_bubble_rounded,
+        'label': Localizations.localeOf(context).languageCode == 'ar'
+            ? 'المحادثات'
+            : 'Chat',
+        'subtitle': Localizations.localeOf(context).languageCode == 'ar'
+            ? 'تواصل مع المعلمين'
+            : 'Message teachers',
+        'color': AppColors.purple,
+        'bgColor': AppColors.purple.withOpacity(0.12),
+        'onTap': () => context.push(RouteNames.chatConversations),
+        'showFor': ['online', 'offline'], // Show for both
       },
       {
         'icon': Icons.settings_rounded,
@@ -232,8 +272,17 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
         'color': const Color(0xFF6B7280),
         'bgColor': const Color(0xFFF3F4F6),
         'onTap': () => context.push(RouteNames.settings),
+        'showFor': ['online', 'offline'], // Show for both
       },
     ];
+
+    // Filter menu items based on student type
+    final menuItems = allMenuItems.where((item) {
+      final showFor = item['showFor'] as List<String>;
+      // If studentType is null, show all items (fallback)
+      if (studentType == null) return true;
+      return showFor.contains(studentType);
+    }).toList();
 
     return Scaffold(
       backgroundColor: AppColors.beige,
@@ -444,20 +493,43 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                 child: ClipOval(
                   child: _profile?['avatar'] != null
                       ? Image.network(
-                          _profile!['avatar']?.toString() ?? '',
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => Image.asset(
-                            'assets/images/student-avatar.png',
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => Container(
-                              color: Colors.white,
-                              child: const Icon(
-                                Icons.person,
-                                size: 45,
-                                color: AppColors.purple,
-                              ),
-                            ),
+                          ApiEndpoints.getImageUrl(
+                            _profile!['avatar']?.toString(),
                           ),
+                          fit: BoxFit.cover,
+                          loadingBuilder: (context, child, loadingProgress) {
+                            if (loadingProgress == null) return child;
+                            return Container(
+                              color: Colors.white,
+                              child: const Center(
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: AppColors.purple,
+                                ),
+                              ),
+                            );
+                          },
+                          errorBuilder: (context, error, stackTrace) {
+                            if (kDebugMode) {
+                              print(
+                                  '❌ Error loading avatar image in dashboard: $error');
+                              print(
+                                  '   Avatar URL: ${ApiEndpoints.getImageUrl(_profile!['avatar']?.toString())}');
+                              print('   Stack trace: $stackTrace');
+                            }
+                            return Image.asset(
+                              'assets/images/student-avatar.png',
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => Container(
+                                color: Colors.white,
+                                child: const Icon(
+                                  Icons.person,
+                                  size: 45,
+                                  color: AppColors.purple,
+                                ),
+                              ),
+                            );
+                          },
                         )
                       : Image.asset(
                           'assets/images/student-avatar.png',

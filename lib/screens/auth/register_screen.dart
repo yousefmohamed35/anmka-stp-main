@@ -68,7 +68,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       setState(() => _isLoading = true);
 
       try {
-        await AuthService.instance.register(
+        final authResponse = await AuthService.instance.register(
           name: _nameController.text.trim(),
           email: _emailController.text.trim(),
           phone: _phoneController.text.trim(),
@@ -84,9 +84,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setBool('hasLaunched', true);
 
-        // Navigate to home
+        // Navigate by role: instructor → instructor flow, else → student flow
         if (mounted) {
-          context.go(RouteNames.home);
+          final role = authResponse.user.role.toLowerCase();
+          if (role == 'instructor' || role == 'teacher') {
+            context.go(RouteNames.instructorHome);
+          } else {
+            context.go(RouteNames.home);
+          }
         }
       } catch (e) {
         if (!mounted) return;
@@ -423,9 +428,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
   Widget _buildStudentTypeSelector(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final options = [
-      (label: l10n.inPersonStudent, value: 'in_person'),
       (label: l10n.onlineStudent, value: 'online'),
-      (label: l10n.bothStudentTypes, value: 'both'),
+      (label: l10n.inPersonStudent, value: 'offline'),
     ];
 
     return Row(

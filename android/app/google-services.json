@@ -9,7 +9,7 @@
       "client_info": {
         "mobilesdk_app_id": "1:134644525634:android:7ab309e0ec7c3e2c879bdb",
         "android_client_info": {
-          "package_name": "com.anmka.stp"
+          "package_name": "com.anmka.stpnew"
         }
       },
       "oauth_client": [
@@ -17,7 +17,7 @@
           "client_id": "134644525634-023j9ss6p47bg32ll0pa86cb674o81bj.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
-            "package_name": "com.anmka.stp",
+            "package_name": "com.anmka.stpnew",
             "certificate_hash": "1bbc808e8aff4160c3b2cb865e4aa4556d32da3e"
           }
         },
@@ -42,7 +42,7 @@
               "client_id": "134644525634-ho9l5r8d2tlifvq52kf08747pbk894or.apps.googleusercontent.com",
               "client_type": 2,
               "ios_info": {
-                "bundle_id": "com.anmka.stp"
+                "bundle_id": "com.anmka.stpnew"
               }
             }
           ]

@@ -5,10 +5,18 @@ import '../../screens/startup/onboarding_screen.dart';
 import '../../screens/auth/login_screen.dart';
 import '../../screens/auth/register_screen.dart';
 import '../../screens/auth/forgot_password_screen.dart';
-import '../../screens/main/home_screen.dart';
-import '../../screens/main/courses_screen.dart';
-import '../../screens/main/progress_screen.dart';
-import '../../screens/main/student_dashboard_screen.dart';
+import '../../screens/student/home_screen.dart';
+import '../../screens/student/courses_screen.dart';
+import '../../screens/student/progress_screen.dart';
+import '../../screens/student/student_dashboard_screen.dart';
+import '../../screens/instructor/instructor_home_screen.dart';
+import '../../screens/instructor/instructor_courses_screen.dart';
+import '../../screens/instructor/instructor_earnings_screen.dart';
+import '../../screens/instructor/instructor_profile_screen.dart';
+import '../../screens/instructor/instructor_create_course_screen.dart';
+import '../../screens/instructor/instructor_course_details_screen.dart';
+import '../../screens/instructor/instructor_session_details_screen.dart';
+import '../../screens/instructor/instructor_scan_qr_screen.dart';
 import '../../screens/secondary/categories_screen.dart';
 import '../../screens/secondary/course_details_screen.dart';
 import '../../screens/secondary/lesson_viewer_screen.dart';
@@ -28,6 +36,8 @@ import '../../screens/secondary/pdf_viewer_screen.dart';
 import '../../screens/secondary/center_attendance_screen.dart';
 import '../../screens/secondary/teachers_screen.dart';
 import '../../screens/secondary/teacher_details_screen.dart';
+import '../../screens/secondary/chat_conversations_screen.dart';
+import '../../screens/secondary/chat_messages_screen.dart';
 import 'route_names.dart';
 
 class AppRouter {
@@ -82,7 +92,51 @@ class AppRouter {
         ),
       ),
 
-      // Main app screens (with bottom nav) - with smooth transitions
+      // Instructor flow
+      GoRoute(
+        path: RouteNames.instructorHome,
+        pageBuilder: (context, state) => _buildPageWithTransition(
+          key: state.pageKey,
+          child: const InstructorHomeScreen(),
+        ),
+      ),
+      GoRoute(
+        path: RouteNames.instructorCourses,
+        pageBuilder: (context, state) => _buildPageWithTransition(
+          key: state.pageKey,
+          child: const InstructorCoursesScreen(),
+        ),
+      ),
+      GoRoute(
+        path: RouteNames.instructorCreateCourse,
+        pageBuilder: (context, state) => _buildPageWithTransition(
+          key: state.pageKey,
+          child: const InstructorCreateCourseScreen(),
+        ),
+      ),
+      GoRoute(
+        path: RouteNames.instructorEarnings,
+        pageBuilder: (context, state) => _buildPageWithTransition(
+          key: state.pageKey,
+          child: const InstructorEarningsScreen(),
+        ),
+      ),
+      GoRoute(
+        path: RouteNames.instructorProfile,
+        pageBuilder: (context, state) => _buildPageWithTransition(
+          key: state.pageKey,
+          child: const InstructorProfileScreen(),
+        ),
+      ),
+      GoRoute(
+        path: RouteNames.instructorScanQr,
+        pageBuilder: (context, state) => _buildPageWithTransition(
+          key: state.pageKey,
+          child: const InstructorScanQrScreen(),
+        ),
+      ),
+
+      // Student flow - main app screens (with bottom nav)
       GoRoute(
         path: RouteNames.home,
         pageBuilder: (context, state) => _buildPageWithTransition(
@@ -151,6 +205,29 @@ class AppRouter {
         ),
       ),
       GoRoute(
+        path: RouteNames.instructorCourseDetails,
+        pageBuilder: (context, state) => _buildPageWithTransition(
+          key: state.pageKey,
+          child: InstructorCourseDetailsScreen(
+            course: state.extra as Map<String, dynamic>?,
+          ),
+        ),
+      ),
+      GoRoute(
+        path: RouteNames.instructorSessionDetails,
+        pageBuilder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>? ?? {};
+          return _buildPageWithTransition(
+            key: state.pageKey,
+            child: InstructorSessionDetailsScreen(
+              courseId: extra['courseId']?.toString() ?? '',
+              course: extra['course'] as Map<String, dynamic>?,
+              section: extra['section'] as Map<String, dynamic>? ?? {},
+            ),
+          );
+        },
+      ),
+      GoRoute(
         path: RouteNames.teacherDetails,
         pageBuilder: (context, state) => _buildPageWithTransition(
           key: state.pageKey,
@@ -165,7 +242,7 @@ class AppRouter {
           final extra = state.extra;
           Map<String, dynamic>? lesson;
           String? courseId;
-          
+
           if (extra is Map<String, dynamic>) {
             // Check if it's a wrapper map with lesson and courseId
             if (extra.containsKey('lesson')) {
@@ -176,7 +253,7 @@ class AppRouter {
               lesson = extra;
             }
           }
-          
+
           return _buildPageWithTransition(
             key: state.pageKey,
             child: LessonViewerScreen(
@@ -273,14 +350,14 @@ class AppRouter {
           final extra = state.extra;
           String pdfUrl = '';
           String? title;
-          
+
           if (extra is Map<String, dynamic>) {
             pdfUrl = extra['pdfUrl']?.toString() ?? '';
             title = extra['title']?.toString();
           } else if (extra is String) {
             pdfUrl = extra;
           }
-          
+
           return _buildPageWithTransition(
             key: state.pageKey,
             child: PdfViewerScreen(
@@ -296,6 +373,28 @@ class AppRouter {
           key: state.pageKey,
           child: const CenterAttendanceScreen(),
         ),
+      ),
+      GoRoute(
+        path: RouteNames.chatConversations,
+        pageBuilder: (context, state) => _buildPageWithTransition(
+          key: state.pageKey,
+          child: const ChatConversationsScreen(),
+        ),
+      ),
+      GoRoute(
+        path: '/chat/:conversationId',
+        pageBuilder: (context, state) {
+          final conversationId = state.pathParameters['conversationId'] ?? '';
+          final extra = state.extra as Map<String, dynamic>? ?? {};
+          return _buildPageWithTransition(
+            key: state.pageKey,
+            child: ChatMessagesScreen(
+              conversationId: conversationId,
+              otherUser: extra['otherUser'] as Map<String, dynamic>?,
+              conversation: extra['conversation'] as Map<String, dynamic>?,
+            ),
+          );
+        },
       ),
     ],
   );

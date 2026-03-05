@@ -10,11 +10,21 @@ class RouteNames {
   static const String register = '/register';
   static const String forgotPassword = '/forgot-password';
 
-  // Main app (with bottom nav)
+  // Student flow (main app with bottom nav)
   static const String home = '/home';
   static const String courses = '/courses';
   static const String progress = '/progress';
   static const String dashboard = '/dashboard';
+
+  // Instructor flow
+  static const String instructorHome = '/instructor';
+  static const String instructorCourses = '/instructor/courses';
+  static const String instructorCreateCourse = '/instructor/create-course';
+  static const String instructorEarnings = '/instructor/earnings';
+  static const String instructorProfile = '/instructor/profile';
+  static const String instructorCourseDetails = '/instructor/course-details';
+  static const String instructorSessionDetails = '/instructor/session-details';
+  static const String instructorScanQr = '/instructor/scan-qr';
 
   // Secondary screens
   static const String categories = '/categories';
@@ -36,4 +46,6 @@ class RouteNames {
   static const String centerAttendance = '/center-attendance';
   static const String teachers = '/teachers';
   static const String teacherDetails = '/teacher-details';
+  static const String chatConversations = '/chat';
+  static const String chatMessages = '/chat/:conversationId';
 }

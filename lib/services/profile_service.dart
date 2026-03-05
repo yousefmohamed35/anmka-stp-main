@@ -12,17 +12,59 @@ class ProfileService {
   /// Get user profile
   Future<Map<String, dynamic>> getProfile() async {
     try {
+      if (kDebugMode) {
+        print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        print('📤 PROFILE SERVICE - GET PROFILE');
+        print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        print('URL: ${ApiEndpoints.me}');
+        print('Require Auth: true');
+        print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      }
+      
       final response = await ApiClient.instance.get(
         ApiEndpoints.me,
         requireAuth: true,
       );
       
+      if (kDebugMode) {
+        print('📥 PROFILE SERVICE - RESPONSE RECEIVED');
+        print('Response keys: ${response.keys.toList()}');
+        print('Response success: ${response['success']}');
+        print('Response data: ${response['data']}');
+        if (response['data'] != null) {
+          final data = response['data'] as Map<String, dynamic>;
+          print('Data keys: ${data.keys.toList()}');
+          print('Data name: ${data['name']}');
+          print('Data email: ${data['email']}');
+          print('Data type: ${data.runtimeType}');
+        }
+        print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      }
+      
       if (response['success'] == true && response['data'] != null) {
-        return response['data'] as Map<String, dynamic>;
+        final profileData = response['data'] as Map<String, dynamic>;
+        if (kDebugMode) {
+          print('✅ Profile data extracted successfully');
+          print('  Profile keys: ${profileData.keys.toList()}');
+          print('  Profile name: ${profileData['name']}');
+          print('  Profile email: ${profileData['email']}');
+        }
+        return profileData;
       } else {
+        if (kDebugMode) {
+          print('❌ Profile response failed');
+          print('  Success: ${response['success']}');
+          print('  Message: ${response['message']}');
+          print('  Data: ${response['data']}');
+        }
         throw Exception(response['message'] ?? 'Failed to fetch profile');
       }
     } catch (e) {
+      if (kDebugMode) {
+        print('❌ PROFILE SERVICE ERROR');
+        print('  Error: $e');
+        print('  Error type: ${e.runtimeType}');
+      }
       rethrow;
     }
   }
@@ -71,9 +113,9 @@ class ProfileService {
       final response = await ApiClient.instance.post(
         ApiEndpoints.changePassword,
         body: {
-          'current_password': currentPassword,
-          'new_password': newPassword,
-          'new_password_confirmation': newPasswordConfirmation,
+          'currentPassword': currentPassword,
+          'newPassword': newPassword,
+          'confirmPassword': newPasswordConfirmation,
         },
         requireAuth: true,
       );

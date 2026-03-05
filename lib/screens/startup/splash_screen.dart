@@ -1,12 +1,14 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/design/app_colors.dart';
 import '../../core/navigation/route_names.dart';
+import '../../services/token_storage_service.dart';
 import '../../l10n/app_localizations.dart';
 
 /// Splash Screen - Premium & Elegant Design with Smart Idea
@@ -171,12 +173,44 @@ class _SplashScreenState extends State<SplashScreen>
     final prefs = await SharedPreferences.getInstance();
     final hasLaunched = prefs.getBool('hasLaunched') ?? false;
 
+    if (kDebugMode) {
+      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      print('🚀 SPLASH SCREEN - CHECK FIRST LAUNCH');
+      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+      print('hasLaunched: $hasLaunched');
+      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    }
+
     if (!mounted) return;
 
-    if (hasLaunched) {
-      context.go(RouteNames.home);
-    } else {
+    if (!hasLaunched) {
+      // First time launch, show onboarding
+      if (kDebugMode) {
+        print('🆕 First time launch, showing onboarding');
+      }
       context.go(RouteNames.onboarding1);
+      return;
+    }
+
+    // User has launched before: check if logged in and route by role
+    final isLoggedIn = await TokenStorageService.instance.isLoggedIn();
+    if (!isLoggedIn) {
+      if (kDebugMode) {
+        print('🔓 Not logged in, going to login');
+      }
+      context.go(RouteNames.login);
+      return;
+    }
+
+    final role = await TokenStorageService.instance.getUserRole();
+    final roleLower = role?.toLowerCase() ?? 'student';
+    if (kDebugMode) {
+      print('✅ User has launched before, role: $roleLower');
+    }
+    if (roleLower == 'instructor' || roleLower == 'teacher') {
+      context.go(RouteNames.instructorHome);
+    } else {
+      context.go(RouteNames.home);
     }
   }
 

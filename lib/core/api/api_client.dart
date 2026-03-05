@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:developer' as developer;
 import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:flutter/foundation.dart';
@@ -10,71 +11,78 @@ class ApiClient {
 
   static final ApiClient instance = ApiClient._();
 
-  /// Log API request
+  /// Log API request (optionally via dart:developer for filterable logs)
   void _logRequest(String method, String url, Map<String, String>? headers,
-      Map<String, dynamic>? body) {
-    if (kDebugMode) {
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      print('📤 API REQUEST');
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      print('Method: $method');
-      print('URL: $url');
-      if (headers != null && headers.isNotEmpty) {
-        print('Headers:');
-        headers.forEach((key, value) {
-          // Hide sensitive data
-          if (key.toLowerCase() == 'authorization') {
-            print(
-                '  $key: Bearer ${value.length > 20 ? "${value.substring(0, 20)}..." : value}');
-          } else {
-            print('  $key: $value');
-          }
-        });
-
-        // Check if Authorization header exists
-        if (!headers.containsKey('Authorization')) {
-          print('  ⚠️ WARNING: Authorization header is MISSING!');
-          print('  💡 This request will likely fail with 401 Unauthorized');
+      Map<String, dynamic>? body,
+      {String? logTag}) {
+    if (!kDebugMode && logTag == null) return;
+    final sb = StringBuffer();
+    sb.writeln('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    sb.writeln('📤 API REQUEST');
+    sb.writeln('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    sb.writeln('Method: $method');
+    sb.writeln('URL: $url');
+    if (headers != null && headers.isNotEmpty) {
+      sb.writeln('Headers:');
+      headers.forEach((key, value) {
+        if (key.toLowerCase() == 'authorization') {
+          sb.writeln(
+              '  $key: Bearer ${value.length > 20 ? "${value.substring(0, 20)}..." : value}');
+        } else {
+          sb.writeln('  $key: $value');
         }
-      } else {
-        print('⚠️ WARNING: No headers provided!');
+      });
+      if (!headers.containsKey('Authorization')) {
+        sb.writeln('  ⚠️ WARNING: Authorization header is MISSING!');
       }
-      if (body != null && body.isNotEmpty) {
-        print('Body:');
-        try {
-          final prettyJson = const JsonEncoder.withIndent('  ').convert(body);
-          print(prettyJson);
-        } catch (e) {
-          print('  $body');
-        }
+    } else {
+      sb.writeln('⚠️ WARNING: No headers provided!');
+    }
+    if (body != null && body.isNotEmpty) {
+      sb.writeln('Body:');
+      try {
+        sb.writeln(const JsonEncoder.withIndent('  ').convert(body));
+      } catch (e) {
+        sb.writeln('  $body');
       }
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    }
+    sb.writeln('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    final msg = sb.toString();
+    if (logTag != null) {
+      developer.log(msg, name: logTag);
+    } else if (kDebugMode) {
+      print(msg);
     }
   }
 
-  /// Log API response
+  /// Log API response (optionally via dart:developer for filterable logs)
   void _logResponse(String method, String url, int statusCode,
-      Map<String, dynamic>? response, String? error) {
-    if (kDebugMode) {
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      print('📥 API RESPONSE');
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      print('Method: $method');
-      print('URL: $url');
-      print('Status Code: $statusCode');
-      if (error != null) {
-        print('❌ Error: $error');
-      } else if (response != null) {
-        print('Response:');
-        try {
-          final prettyJson =
-              const JsonEncoder.withIndent('  ').convert(response);
-          print(prettyJson);
-        } catch (e) {
-          print('  $response');
-        }
+      Map<String, dynamic>? response, String? error,
+      {String? logTag}) {
+    if (!kDebugMode && logTag == null) return;
+    final sb = StringBuffer();
+    sb.writeln('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    sb.writeln('📥 API RESPONSE');
+    sb.writeln('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    sb.writeln('Method: $method');
+    sb.writeln('URL: $url');
+    sb.writeln('Status Code: $statusCode');
+    if (error != null) {
+      sb.writeln('❌ Error: $error');
+    } else if (response != null) {
+      sb.writeln('Response:');
+      try {
+        sb.writeln(const JsonEncoder.withIndent('  ').convert(response));
+      } catch (e) {
+        sb.writeln('  $response');
       }
-      print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    }
+    sb.writeln('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    final msg = sb.toString();
+    if (logTag != null) {
+      developer.log(msg, name: logTag);
+    } else if (kDebugMode) {
+      print(msg);
     }
   }
 
@@ -143,6 +151,7 @@ class ApiClient {
     String url, {
     Map<String, String>? headers,
     bool requireAuth = true,
+    String? logTag,
   }) async {
     try {
       final finalHeaders = await _getHeaders(
@@ -150,15 +159,27 @@ class ApiClient {
         requireAuth: requireAuth,
       );
 
+      if (logTag != null) {
+        _logRequest('GET', url, finalHeaders, null, logTag: logTag);
+      }
+
       final response = await http
           .get(
             Uri.parse(url),
             headers: finalHeaders,
           )
-          .timeout(const Duration(seconds: 30));
+          .timeout(const Duration(seconds: 45));
 
-      return _handleResponse(response);
+      final responseData = _handleResponse(response);
+      if (logTag != null) {
+        _logResponse('GET', url, response.statusCode, responseData, null,
+            logTag: logTag);
+      }
+      return responseData;
     } catch (e) {
+      if (logTag != null) {
+        _logResponse('GET', url, 0, null, e.toString(), logTag: logTag);
+      }
       throw ApiException('Network error: ${e.toString()}');
     }
   }
@@ -169,6 +190,7 @@ class ApiClient {
     Map<String, String>? headers,
     Map<String, dynamic>? body,
     bool requireAuth = true,
+    String? logTag,
   }) async {
     try {
       final finalHeaders = await _getHeaders(
@@ -176,8 +198,7 @@ class ApiClient {
         requireAuth: requireAuth,
       );
 
-      // Log request AFTER getting headers (so we can see the token)
-      _logRequest('POST', url, finalHeaders, body);
+      _logRequest('POST', url, finalHeaders, body, logTag: logTag);
 
       final response = await http
           .post(
@@ -185,13 +206,14 @@ class ApiClient {
             headers: finalHeaders,
             body: body != null ? jsonEncode(body) : null,
           )
-          .timeout(const Duration(seconds: 30));
+          .timeout(const Duration(seconds: 45));
 
       final responseData = _handleResponse(response);
-      _logResponse('POST', url, response.statusCode, responseData, null);
+      _logResponse('POST', url, response.statusCode, responseData, null,
+          logTag: logTag);
       return responseData;
     } catch (e) {
-      _logResponse('POST', url, 0, null, e.toString());
+      _logResponse('POST', url, 0, null, e.toString(), logTag: logTag);
       throw ApiException('Network error: ${e.toString()}');
     }
   }
@@ -202,6 +224,7 @@ class ApiClient {
     Map<String, String>? headers,
     Map<String, dynamic>? body,
     bool requireAuth = true,
+    String? logTag,
   }) async {
     try {
       final finalHeaders = await _getHeaders(
@@ -209,7 +232,7 @@ class ApiClient {
         requireAuth: requireAuth,
       );
 
-      _logRequest('PUT', url, finalHeaders, body);
+      _logRequest('PUT', url, finalHeaders, body, logTag: logTag);
 
       final response = await http
           .put(
@@ -217,13 +240,48 @@ class ApiClient {
             headers: finalHeaders,
             body: body != null ? jsonEncode(body) : null,
           )
-          .timeout(const Duration(seconds: 30));
+          .timeout(const Duration(seconds: 45));
 
       final responseData = _handleResponse(response);
-      _logResponse('PUT', url, response.statusCode, responseData, null);
+      _logResponse('PUT', url, response.statusCode, responseData, null,
+          logTag: logTag);
       return responseData;
     } catch (e) {
-      _logResponse('PUT', url, 0, null, e.toString());
+      _logResponse('PUT', url, 0, null, e.toString(), logTag: logTag);
+      throw ApiException('Network error: ${e.toString()}');
+    }
+  }
+
+  /// PATCH request
+  Future<Map<String, dynamic>> patch(
+    String url, {
+    Map<String, String>? headers,
+    Map<String, dynamic>? body,
+    bool requireAuth = true,
+    String? logTag,
+  }) async {
+    try {
+      final finalHeaders = await _getHeaders(
+        additionalHeaders: headers,
+        requireAuth: requireAuth,
+      );
+
+      _logRequest('PATCH', url, finalHeaders, body, logTag: logTag);
+
+      final response = await http
+          .patch(
+            Uri.parse(url),
+            headers: finalHeaders,
+            body: body != null ? jsonEncode(body) : null,
+          )
+          .timeout(const Duration(seconds: 45));
+
+      final responseData = _handleResponse(response);
+      _logResponse('PATCH', url, response.statusCode, responseData, null,
+          logTag: logTag);
+      return responseData;
+    } catch (e) {
+      _logResponse('PATCH', url, 0, null, e.toString(), logTag: logTag);
       throw ApiException('Network error: ${e.toString()}');
     }
   }
@@ -233,6 +291,7 @@ class ApiClient {
     String url, {
     Map<String, String>? headers,
     bool requireAuth = true,
+    String? logTag,
   }) async {
     try {
       final finalHeaders = await _getHeaders(
@@ -240,20 +299,21 @@ class ApiClient {
         requireAuth: requireAuth,
       );
 
-      _logRequest('DELETE', url, finalHeaders, null);
+      _logRequest('DELETE', url, finalHeaders, null, logTag: logTag);
 
       final response = await http
           .delete(
             Uri.parse(url),
             headers: finalHeaders,
           )
-          .timeout(const Duration(seconds: 30));
+          .timeout(const Duration(seconds: 45));
 
       final responseData = _handleResponse(response);
-      _logResponse('DELETE', url, response.statusCode, responseData, null);
+      _logResponse('DELETE', url, response.statusCode, responseData, null,
+          logTag: logTag);
       return responseData;
     } catch (e) {
-      _logResponse('DELETE', url, 0, null, e.toString());
+      _logResponse('DELETE', url, 0, null, e.toString(), logTag: logTag);
       throw ApiException('Network error: ${e.toString()}');
     }
   }
@@ -264,6 +324,7 @@ class ApiClient {
     required Map<String, String> fields,
     required Map<String, File> files,
     bool requireAuth = true,
+    String? logTag,
   }) async {
     try {
       final request = http.MultipartRequest('POST', Uri.parse(url));
@@ -277,7 +338,8 @@ class ApiClient {
         if (token != null && token.isNotEmpty) {
           request.headers['Authorization'] = 'Bearer $token';
           if (kDebugMode) {
-            print('🔑 Avatar Upload - Token added: ${token.length > 20 ? "${token.substring(0, 20)}..." : token}');
+            print(
+                '🔑 Avatar Upload - Token added: ${token.length > 20 ? "${token.substring(0, 20)}..." : token}');
           }
         } else {
           if (kDebugMode) {
@@ -294,11 +356,11 @@ class ApiClient {
         final file = entry.value;
         final fieldName = entry.key;
         final fileName = file.path.split(Platform.pathSeparator).last;
-        
+
         if (kDebugMode) {
           print('📎 Adding file: $fieldName = $fileName (${file.path})');
         }
-        
+
         request.files.add(
           await http.MultipartFile.fromPath(
             fieldName,
@@ -308,27 +370,35 @@ class ApiClient {
         );
       }
 
-      _logRequest('POST (Multipart)', url, request.headers, {
-        'fields': fields,
-        'files': files.keys.toList(),
-      });
+      _logRequest(
+          'POST (Multipart)',
+          url,
+          request.headers,
+          {
+            'fields': fields,
+            'files': files.keys.toList(),
+          },
+          logTag: logTag);
 
       final streamedResponse = await request.send().timeout(
-        const Duration(seconds: 60),
-      );
+            const Duration(seconds: 60),
+          );
 
       final response = await http.Response.fromStream(streamedResponse);
-      
+
       if (kDebugMode) {
         print('📥 Avatar Upload Response Status: ${response.statusCode}');
         print('📥 Avatar Upload Response Body: ${response.body}');
       }
-      
+
       final responseData = _handleResponse(response);
-      _logResponse('POST (Multipart)', url, response.statusCode, responseData, null);
+      _logResponse(
+          'POST (Multipart)', url, response.statusCode, responseData, null,
+          logTag: logTag);
       return responseData;
     } catch (e) {
-      _logResponse('POST (Multipart)', url, 0, null, e.toString());
+      _logResponse('POST (Multipart)', url, 0, null, e.toString(),
+          logTag: logTag);
       if (kDebugMode) {
         print('❌ Avatar Upload Error: $e');
       }

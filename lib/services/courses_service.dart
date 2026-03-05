@@ -234,14 +234,38 @@ class CoursesService {
 
   /// Get course details
   Future<Map<String, dynamic>> getCourseDetails(String courseId) async {
+    final endpoint = ApiEndpoints.course(courseId);
+    if (kDebugMode) {
+      print('═══════════════════════════════════════════════════════════');
+      print('📤 COURSE DETAILS REQUEST (teacher/student)');
+      print('═══════════════════════════════════════════════════════════');
+      print('  Method: GET');
+      print('  Endpoint: $endpoint');
+      print('  Course ID: $courseId');
+      print('───────────────────────────────────────────────────────────');
+    }
     try {
       final response = await ApiClient.instance.get(
-        ApiEndpoints.course(courseId),
+        endpoint,
         requireAuth: true,
       );
 
       if (kDebugMode) {
-        print('📦 Course Details API Response:');
+        print('═══════════════════════════════════════════════════════════');
+        print('📥 COURSE DETAILS RESPONSE (teacher/student)');
+        print('═══════════════════════════════════════════════════════════');
+        print('  Course ID: $courseId');
+        print('  success: ${response['success']}');
+        print('  message: ${response['message']}');
+        print('  Full response keys: ${response.keys.toList()}');
+        try {
+          print('  Full response JSON:');
+          print(const JsonEncoder.withIndent('    ').convert(response));
+        } catch (_) {
+          print('  Raw response: $response');
+        }
+        print('───────────────────────────────────────────────────────────');
+        print('📦 Course Details API Response (legacy):');
         print('  Course ID: $courseId');
         print('  Success: ${response['success']}');
         print('  Message: ${response['message']}');
@@ -314,7 +338,8 @@ class CoursesService {
         print('  Success: ${response['success']}');
         print('  Message: ${response['message']}');
         if (response['data'] != null) {
-          print('  Data Keys: ${(response['data'] as Map<String, dynamic>).keys.toList()}');
+          print(
+              '  Data Keys: ${(response['data'] as Map<String, dynamic>).keys.toList()}');
         }
       }
 
@@ -360,15 +385,33 @@ class CoursesService {
     }
   }
 
-  /// Get all categories
-  Future<List<Map<String, dynamic>>> getCategories() async {
+  /// Get all categories. Uses admin endpoint when [useAdmin] is true (for instructors).
+  Future<List<Map<String, dynamic>>> getCategories(
+      {bool useAdmin = false}) async {
+    final url =
+        useAdmin ? ApiEndpoints.adminCategories : ApiEndpoints.categories;
+    if (kDebugMode) {
+      print('═══════════════════════════════════════════════════════════');
+      print('📤 CATEGORIES REQUEST');
+      print('═══════════════════════════════════════════════════════════');
+      print('  Method: GET');
+      print('  URL: $url');
+      print('  requireAuth: true');
+      print('───────────────────────────────────────────────────────────');
+    }
     try {
       final response = await ApiClient.instance.get(
-        ApiEndpoints.categories,
+        url,
         requireAuth: true,
       );
 
       if (kDebugMode) {
+        print('═══════════════════════════════════════════════════════════');
+        print('📥 CATEGORIES RESPONSE (success)');
+        print('═══════════════════════════════════════════════════════════');
+        print('  URL: $url');
+        print('  success: ${response['success']}');
+        print('  message: ${response['message']}');
         print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
         print('📦 CATEGORIES API RESPONSE');
         print('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
@@ -446,6 +489,16 @@ class CoursesService {
         throw Exception(response['message'] ?? 'Failed to fetch categories');
       }
     } catch (e) {
+      if (kDebugMode) {
+        print('═══════════════════════════════════════════════════════════');
+        print('❌ CATEGORIES RESPONSE (error)');
+        print('═══════════════════════════════════════════════════════════');
+        print('  URL: $url');
+        print('  Error: $e');
+        print('  Error type: ${e.runtimeType}');
+        print('  (404? Try useAdmin: true for /api/admin/categories)');
+        print('───────────────────────────────────────────────────────────');
+      }
       rethrow;
     }
   }

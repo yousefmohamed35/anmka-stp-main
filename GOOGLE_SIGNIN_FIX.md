@@ -23,9 +23,9 @@ PlatformException(sign_in_failed, com.google.android.gms.common.api.Api10:, null
 
 1. في Firebase Console، اذهب إلى **Project Settings** (⚙️ → Project settings)
 2. افتح تبويب **Your apps**
-3. اختر تطبيق Android الخاص بك (`com.anmka.stp`)
+3. اختر تطبيق Android الخاص بك (`com.anmka.stpnew`)
 4. تأكد من أن:
-   - **Package name**: `com.anmka.stp` (يجب أن يطابق `applicationId` في `android/app/build.gradle`)
+   - **Package name**: `com.anmka.stpnew` (يجب أن يطابق `applicationId` في `android/app/build.gradle`)
    - **SHA-1 certificate fingerprint**: موجود ومحدث
 
 ### الخطوة 3: إضافة SHA-1 Fingerprint (إن لم يكن موجوداً)

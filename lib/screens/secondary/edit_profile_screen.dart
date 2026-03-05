@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:go_router/go_router.dart';
@@ -121,20 +122,32 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     );
   }
 
-  /// Pick image from camera or gallery
-  /// Note: image_picker handles permissions automatically
+  /// Pick image from camera or gallery.
+  /// Gallery uses file_picker (Photo Picker) - no READ_MEDIA_IMAGES needed.
   Future<void> _pickImage(ImageSource source) async {
     try {
-      final XFile? image = await _imagePicker.pickImage(
-        source: source,
-        imageQuality: 85,
-        maxWidth: 1024,
-        maxHeight: 1024,
-      );
+      String? path;
+      if (source == ImageSource.camera) {
+        final XFile? image = await _imagePicker.pickImage(
+          source: ImageSource.camera,
+          imageQuality: 85,
+          maxWidth: 1024,
+          maxHeight: 1024,
+        );
+        path = image?.path;
+      } else {
+        // Gallery: use file_picker (Photo Picker) - avoids READ_MEDIA_IMAGES
+        final result = await FilePicker.platform.pickFiles(
+          type: FileType.image,
+          allowMultiple: false,
+        );
+        path = result?.files.singleOrNull?.path;
+      }
 
-      if (image != null) {
+      final validPath = path?.trim();
+      if (validPath != null && validPath.isNotEmpty) {
         setState(() {
-          _selectedImage = File(image.path);
+          _selectedImage = File(validPath);
         });
         // Upload image immediately
         await _uploadAvatar();

@@ -8,6 +8,7 @@ import '../../core/navigation/route_names.dart';
 import '../../data/sample_teachers.dart';
 import '../../l10n/app_localizations.dart';
 import '../../services/teachers_service.dart';
+import '../../services/chat_service.dart';
 
 class TeacherDetailsScreen extends StatefulWidget {
   const TeacherDetailsScreen({super.key, this.teacher});
@@ -20,6 +21,7 @@ class TeacherDetailsScreen extends StatefulWidget {
 
 class _TeacherDetailsScreenState extends State<TeacherDetailsScreen> {
   bool _isLoading = false;
+  bool _isStartingChat = false;
   String? _errorMessage;
   Map<String, dynamic>? _teacherData;
   List<Map<String, dynamic>> _courses = [];
@@ -69,6 +71,57 @@ class _TeacherDetailsScreenState extends State<TeacherDetailsScreen> {
     }
   }
 
+  Future<void> _startChatWithTeacher() async {
+    final teacherId = _teacher['id']?.toString() ??
+        _teacher['userId']?.toString() ??
+        _teacher['user_id']?.toString();
+    if (teacherId == null || teacherId.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              Localizations.localeOf(context).languageCode == 'ar'
+                  ? 'لا يمكن بدء المحادثة'
+                  : 'Cannot start chat',
+              style: GoogleFonts.cairo(),
+            ),
+          ),
+        );
+      }
+      return;
+    }
+    setState(() => _isStartingChat = true);
+    try {
+      final conv =
+          await ChatService.instance.createOrGetConversation(teacherId);
+      final convId =
+          conv['id']?.toString() ?? conv['conversationId']?.toString();
+      if (convId == null || convId.isEmpty || !mounted) return;
+      context.push(
+        '/chat/$convId',
+        extra: {
+          'conversationId': convId,
+          'otherUser': _teacher,
+          'conversation': conv,
+        },
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              e.toString().replaceFirst('Exception: ', ''),
+              style: GoogleFonts.cairo(),
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isStartingChat = false);
+    }
+  }
+
   Map<String, dynamic> get _teacher =>
       _teacherData ??
       widget.teacher ??
@@ -94,28 +147,7 @@ class _TeacherDetailsScreenState extends State<TeacherDetailsScreen> {
       body: _isLoading && _teacherData == null
           ? _buildTeacherDetailsSkeleton()
           : _errorMessage != null && _teacherData == null
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        _errorMessage!,
-                        style: GoogleFonts.cairo(color: Colors.red),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 16),
-                      ElevatedButton(
-                        onPressed: () {
-                          final teacherId = widget.teacher?['id']?.toString();
-                          if (teacherId != null && teacherId.isNotEmpty) {
-                            _loadTeacherDetails(teacherId);
-                          }
-                        },
-                        child: const Text('Retry'),
-                      ),
-                    ],
-                  ),
-                )
+              ? _buildErrorState(l10n: l10n)
               : SingleChildScrollView(
                   padding: const EdgeInsets.all(16),
                   child: Column(
@@ -211,6 +243,49 @@ class _TeacherDetailsScreenState extends State<TeacherDetailsScreen> {
                                     style: GoogleFonts.cairo(
                                       fontSize: 13,
                                       color: AppColors.foreground,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 14),
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: ElevatedButton.icon(
+                                      onPressed: _isStartingChat
+                                          ? null
+                                          : _startChatWithTeacher,
+                                      icon: _isStartingChat
+                                          ? const SizedBox(
+                                              width: 18,
+                                              height: 18,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                                color: Colors.white,
+                                              ),
+                                            )
+                                          : const Icon(
+                                              Icons.chat_bubble_rounded,
+                                              size: 20,
+                                            ),
+                                      label: Text(
+                                        Localizations.localeOf(context)
+                                                    .languageCode ==
+                                                'ar'
+                                            ? 'تواصل مع المعلم'
+                                            : 'Chat with teacher',
+                                        style: GoogleFonts.cairo(
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: AppColors.purple,
+                                        foregroundColor: Colors.white,
+                                        padding: const EdgeInsets.symmetric(
+                                          vertical: 12,
+                                        ),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(12),
+                                        ),
+                                      ),
                                     ),
                                   ),
                                 ],
@@ -331,6 +406,166 @@ class _TeacherDetailsScreenState extends State<TeacherDetailsScreen> {
     );
   }
 
+  /// User-friendly error UI with clear message and retry action
+  Widget _buildErrorState({required AppLocalizations l10n}) {
+    final isAr = Localizations.localeOf(context).languageCode == 'ar';
+    final (title, description) = _getUserFriendlyError(
+      _errorMessage ?? '',
+      isAr,
+      false, // teacher details, not list
+    );
+
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Center(
+        child: SingleChildScrollView(
+          child: Container(
+            padding: const EdgeInsets.all(28),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.purple.withOpacity(0.08),
+                  blurRadius: 24,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    color: AppColors.destructive.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.person_off_rounded,
+                    size: 40,
+                    color: AppColors.destructive,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  title,
+                  style: GoogleFonts.cairo(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.foreground,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  description,
+                  style: GoogleFonts.cairo(
+                    fontSize: 15,
+                    color: AppColors.mutedForeground,
+                    height: 1.5,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 28),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      final teacherId = widget.teacher?['id']?.toString();
+                      if (teacherId != null && teacherId.isNotEmpty) {
+                        _loadTeacherDetails(teacherId);
+                      }
+                    },
+                    icon: const Icon(Icons.refresh_rounded, size: 22),
+                    label: Text(
+                      l10n.retry,
+                      style: GoogleFonts.cairo(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.purple,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      elevation: 0,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Convert technical error to user-friendly (title, description)
+  (String, String) _getUserFriendlyError(
+    String rawError,
+    bool isAr,
+    bool isTeachersList,
+  ) {
+    final err = rawError.toLowerCase();
+    if (err.contains('socket') ||
+        err.contains('connection') ||
+        err.contains('network') ||
+        err.contains('internet')) {
+      return (
+        isAr ? 'لا يوجد اتصال بالإنترنت' : 'No internet connection',
+        isAr
+            ? 'تأكد من اتصالك بالإنترنت وحاول مرة أخرى.'
+            : 'Please check your internet connection and try again.',
+      );
+    }
+    if (err.contains('timeout') || err.contains('timed out')) {
+      return (
+        isAr ? 'انتهت مهلة الاتصال' : 'Connection timed out',
+        isAr
+            ? 'استغرق الطلب وقتاً طويلاً. حاول مرة أخرى.'
+            : 'The request took too long. Please try again.',
+      );
+    }
+    if (err.contains('401') || err.contains('unauthorized')) {
+      return (
+        isAr ? 'يجب تسجيل الدخول' : 'Login required',
+        isAr
+            ? 'يرجى تسجيل الدخول لمشاهدة المحتوى.'
+            : 'Please sign in to view this content.',
+      );
+    }
+    if (err.contains('404') || err.contains('not found')) {
+      return (
+        isAr ? 'المحتوى غير متوفر' : 'Content not found',
+        isAr
+            ? 'لم يتم العثور على المحتوى المطلوب.'
+            : 'The requested content could not be found.',
+      );
+    }
+    if (err.contains('500') || err.contains('server')) {
+      return (
+        isAr ? 'مشكلة في الخادم' : 'Server issue',
+        isAr
+            ? 'هناك مشكلة مؤقتة. حاول مرة أخرى لاحقاً.'
+            : 'There\'s a temporary issue. Please try again later.',
+      );
+    }
+    final what = isTeachersList
+        ? (isAr ? 'المعلمين' : 'teachers')
+        : (isAr ? 'تفاصيل المعلم' : 'teacher details');
+    return (
+      isAr ? 'لم نتمكن من التحميل' : 'Couldn\'t load $what',
+      isAr
+          ? 'حدث خطأ أثناء تحميل $what. حاول مرة أخرى.'
+          : 'Something went wrong while loading $what. Please try again.',
+    );
+  }
+
   Widget _buildTeacherDetailsSkeleton() {
     return Skeletonizer(
       enabled: true,
@@ -346,8 +581,8 @@ class _TeacherDetailsScreenState extends State<TeacherDetailsScreen> {
                 borderRadius: BorderRadius.circular(AppRadius.largeCard),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 16,
+                    color: AppColors.purple.withOpacity(0.06),
+                    blurRadius: 20,
                     offset: const Offset(0, 6),
                   ),
                 ],

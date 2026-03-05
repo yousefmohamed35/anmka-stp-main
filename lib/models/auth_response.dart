@@ -20,13 +20,28 @@ class AuthResponse {
 
   factory AuthResponse.fromJson(Map<String, dynamic> json) {
     final data = json['data'] as Map<String, dynamic>? ?? {};
-    final userData = data['user'] as Map<String, dynamic>? ?? {};
+    
+    // Check if data itself is the user (register response) or if data.user exists (login response)
+    Map<String, dynamic> userData;
+    if (data.containsKey('user')) {
+      // Login response: data.user exists
+      userData = data['user'] as Map<String, dynamic>? ?? {};
+    } else if (data.containsKey('id') || data.containsKey('email')) {
+      // Register response: data itself is the user
+      userData = data;
+      print('  ℹ️ User data is at root level of data (register response)');
+    } else {
+      userData = {};
+    }
 
     // Debug logging
     print('🔍 Parsing AuthResponse...');
     print('  json keys: ${json.keys.toList()}');
     if (data.isNotEmpty) {
       print('  data keys: ${data.keys.toList()}');
+    }
+    if (data.containsKey('status')) {
+      print('  ⚠️ User status: ${data['status']}');
     }
 
     // Try multiple possible locations for token (API uses accessToken, not token)

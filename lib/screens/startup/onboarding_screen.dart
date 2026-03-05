@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/design/app_colors.dart';
 import '../../core/design/app_text_styles.dart';
 import '../../core/design/app_radius.dart';
@@ -221,10 +223,16 @@ class OnboardingScreen extends StatelessWidget {
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
-                        onPressed: () {
+                        onPressed: () async {
                           if (isStep1) {
                             context.go(RouteNames.onboarding2);
                           } else {
+                            // Mark onboarding as completed
+                            final prefs = await SharedPreferences.getInstance();
+                            await prefs.setBool('hasLaunched', true);
+                            if (kDebugMode) {
+                              print('✅ Onboarding completed, hasLaunched set to true');
+                            }
                             context.go(RouteNames.login);
                           }
                         },
