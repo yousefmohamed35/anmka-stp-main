@@ -80,6 +80,78 @@ class _ProgressScreenState extends State<ProgressScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final user = _progressData?['user'] as Map<String, dynamic>?;
+    final studentType =
+        user?['studentType'] as String? ?? user?['student_type'] as String?;
+    final enrolledCourses =
+        _progressData?['statistics']?['enrolled_courses'] ?? 0;
+    final certificates =
+        _progressData?['statistics']?['certificates_earned'] ?? 0;
+
+    final allMenuItems = [
+      {
+        'icon': Icons.menu_book_rounded,
+        'label': l10n.enrolledLessons,
+        'subtitle': l10n.activeCourse(enrolledCourses),
+        'color': const Color(0xFF7C3AED),
+        'bgColor': const Color(0xFFEDE9FE),
+        'onTap': () => context.push(RouteNames.enrolled),
+        'showFor': ['online', 'offline'],
+      },
+      {
+        'icon': Icons.assignment_rounded,
+        'label': l10n.myExams,
+        'subtitle': l10n.viewAllExams,
+        'color': const Color(0xFFF97316),
+        'bgColor': const Color(0xFFFFF7ED),
+        'onTap': () => context.push(RouteNames.myExams),
+        'showFor': ['online', 'offline'],
+      },
+      {
+        'icon': Icons.videocam_rounded,
+        'label': l10n.liveCourses,
+        'subtitle': l10n.comingSoon,
+        'color': const Color(0xFF10B981),
+        'bgColor': const Color(0xFFD1FAE5),
+        'onTap': () => context.push(RouteNames.liveCourses),
+        'showFor': ['online'],
+      },
+      {
+        'icon': Icons.emoji_events_rounded,
+        'label': l10n.certificates,
+        'subtitle': '$certificates ${l10n.certificates}',
+        'color': const Color(0xFFEAB308),
+        'bgColor': const Color(0xFFFEF9C3),
+        'onTap': () => context.push(RouteNames.certificates),
+        'showFor': ['online', 'offline'],
+      },
+      {
+        'icon': Icons.download_rounded,
+        'label': l10n.downloads,
+        'subtitle': l10n.savedFiles,
+        'color': const Color(0xFF3B82F6),
+        'bgColor': const Color(0xFFDBEAFE),
+        'onTap': () => context.push(RouteNames.downloads),
+        'showFor': ['online'],
+      },
+      {
+        'icon': Icons.qr_code_scanner_rounded,
+        'label': l10n.centerAttendance,
+        'subtitle': l10n.scanQrCodeInstruction,
+        'color': const Color(0xFF8B5CF6),
+        'bgColor': const Color(0xFFF3E8FF),
+        'onTap': () => context.push(RouteNames.centerAttendance),
+        'showFor': ['online', 'offline'],
+      },
+    ];
+
+    final menuItems = allMenuItems.where((item) {
+      final showFor = item['showFor'] as List<String>;
+      if (studentType == null) return true;
+      return showFor.contains(studentType);
+    }).toList();
+
     return Scaffold(
       backgroundColor: AppColors.beige,
       body: SafeArea(
@@ -591,88 +663,36 @@ class _ProgressScreenState extends State<ProgressScreen> {
                                     ),
                                     const SizedBox(height: 16), // space-y-4
 
-                                    // My exams button - matches React: w-full bg-white rounded-3xl p-5
-                                    GestureDetector(
-                                      onTap: () =>
-                                          context.push(RouteNames.myExams),
-                                      child: Container(
-                                        padding:
-                                            const EdgeInsets.all(20), // p-5
-                                        decoration: BoxDecoration(
-                                          color: Colors.white,
-                                          borderRadius: BorderRadius.circular(
-                                              24), // rounded-3xl
-                                          boxShadow: [
-                                            BoxShadow(
-                                              color: Colors.black
-                                                  .withOpacity(0.05),
-                                              blurRadius: 4,
-                                              offset: const Offset(0, 2),
-                                            ),
-                                          ],
-                                        ),
-                                        child: Row(
-                                          children: [
-                                            Container(
-                                              width: 48, // w-12
-                                              height: 48, // h-12
-                                              decoration: BoxDecoration(
-                                                color: AppColors.orange
-                                                    .withOpacity(0.1),
-                                                borderRadius:
-                                                    BorderRadius.circular(
-                                                        16), // rounded-2xl
-                                              ),
-                                              child: const Icon(
-                                                Icons.description,
-                                                size: 24, // w-6 h-6
-                                                color: AppColors.orange,
-                                              ),
-                                            ),
-                                            const SizedBox(width: 16), // gap-4
-                                            Expanded(
-                                              child: Column(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
-                                                children: [
-                                                  Text(
-                                                    AppLocalizations.of(
-                                                            context)!
-                                                        .myExamsButton,
-                                                    style: AppTextStyles
-                                                        .bodyMedium(
-                                                      color:
-                                                          AppColors.foreground,
-                                                    ).copyWith(
-                                                        fontWeight:
-                                                            FontWeight.bold),
-                                                  ),
-                                                  Text(
-                                                    AppLocalizations.of(
-                                                            context)!
-                                                        .viewAllCompletedExams,
-                                                    style:
-                                                        AppTextStyles.bodySmall(
-                                                      color: AppColors
-                                                          .mutedForeground,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                            Transform.rotate(
-                                              angle:
-                                                  1.5708, // 90 degrees = -90deg in React
-                                              child: const Icon(
-                                                Icons.keyboard_arrow_down,
-                                                size: 20, // w-5 h-5
-                                                color:
-                                                    AppColors.mutedForeground,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
+                                    Text(
+                                      l10n.mainMenu,
+                                      style: AppTextStyles.h3(
+                                        color: AppColors.foreground,
                                       ),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    GridView.builder(
+                                      shrinkWrap: true,
+                                      physics:
+                                          const NeverScrollableScrollPhysics(),
+                                      gridDelegate:
+                                          const SliverGridDelegateWithFixedCrossAxisCount(
+                                        crossAxisCount: 2,
+                                        mainAxisSpacing: 12,
+                                        crossAxisSpacing: 12,
+                                        childAspectRatio: 1.1,
+                                      ),
+                                      itemCount: menuItems.length,
+                                      itemBuilder: (context, index) {
+                                        final item = menuItems[index];
+                                        return _buildMenuItem(
+                                          icon: item['icon'] as IconData,
+                                          label: item['label'] as String,
+                                          subtitle: item['subtitle'] as String,
+                                          color: item['color'] as Color,
+                                          bgColor: item['bgColor'] as Color,
+                                          onTap: item['onTap'] as VoidCallback,
+                                        );
+                                      },
                                     ),
 
                                     const SizedBox(
@@ -737,7 +757,8 @@ class _ProgressScreenState extends State<ProgressScreen> {
                             'assets/images/user-avatar.png',
                             fit: BoxFit.cover,
                             errorBuilder: (context, error, stackTrace) =>
-                                const Icon(Icons.person, color: AppColors.purple),
+                                const Icon(Icons.person,
+                                    color: AppColors.purple),
                           ),
                   ),
                 ),
@@ -800,11 +821,9 @@ class _ProgressScreenState extends State<ProgressScreen> {
                       ),
                     ],
                   ),
-                  child: const Icon(
-                    Icons.verified_user,
-                    size: 20, // w-5 h-5
-                    color: AppColors.purple,
-                  ),
+                  child: ClipRRect(
+                      borderRadius: BorderRadius.circular(20),
+                      child: Image.asset('assets/images/play_store_512.png')),
                 ),
                 const SizedBox(width: 8), // gap-2
                 GestureDetector(
@@ -927,6 +946,61 @@ class _ProgressScreenState extends State<ProgressScreen> {
           ),
         );
       }).toList(),
+    );
+  }
+
+  Widget _buildMenuItem({
+    required IconData icon,
+    required String label,
+    required String subtitle,
+    required Color color,
+    required Color bgColor,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: bgColor,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Icon(icon, color: color, size: 24),
+            ),
+            const Spacer(),
+            Text(
+              label,
+              style: AppTextStyles.bodyMedium(
+                color: AppColors.foreground,
+              ).copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              subtitle,
+              style: AppTextStyles.labelSmall(
+                color: AppColors.mutedForeground,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

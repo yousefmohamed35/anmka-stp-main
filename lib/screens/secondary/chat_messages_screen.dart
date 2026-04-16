@@ -1,7 +1,12 @@
 import 'dart:async';
+import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../core/design/app_colors.dart';
 import '../../core/api/api_endpoints.dart';
 import '../../services/chat_service.dart';
@@ -28,10 +33,12 @@ class ChatMessagesScreen extends StatefulWidget {
 class _ChatMessagesScreenState extends State<ChatMessagesScreen> {
   final _controller = TextEditingController();
   final _scrollController = ScrollController();
+  final ImagePicker _imagePicker = ImagePicker();
   bool _loading = true;
   bool _sending = false;
   List<Map<String, dynamic>> _messages = [];
   String? _currentUserId;
+  File? _pendingImage;
   StreamSubscription<Map<String, dynamic>>? _wsSubscription;
   Timer? _pollTimer;
 
@@ -193,49 +200,130 @@ class _ChatMessagesScreenState extends State<ChatMessagesScreen> {
     });
   }
 
+  Future<void> _pickChatImage(ImageSource source) async {
+    try {
+      String? path;
+      if (source == ImageSource.camera) {
+        final XFile? image = await _imagePicker.pickImage(
+          source: ImageSource.camera,
+          imageQuality: 85,
+          maxWidth: 2048,
+          maxHeight: 2048,
+        );
+        path = image?.path;
+      } else {
+        final result = await FilePicker.platform.pickFiles(
+          type: FileType.image,
+          allowMultiple: false,
+        );
+        path = result?.files.singleOrNull?.path;
+      }
+      final validPath = path?.trim();
+      if (validPath != null && validPath.isNotEmpty && mounted) {
+        setState(() => _pendingImage = File(validPath));
+      }
+    } catch (e) {
+      if (kDebugMode) print('❌ Chat image pick: $e');
+    }
+  }
+
+  void _showImageSourceSheet(bool isAr) {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_camera_rounded),
+              title: Text(isAr ? 'الكاميرا' : 'Camera'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _pickChatImage(ImageSource.camera);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_rounded),
+              title: Text(isAr ? 'معرض الصور' : 'Photo library'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _pickChatImage(ImageSource.gallery);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String? _messageImageUrl(Map<String, dynamic> msg) {
+    for (final key in [
+      'imageUrl',
+      'imageURL',
+      'image',
+      'attachmentUrl',
+      'mediaUrl',
+      'imagePath',
+    ]) {
+      final v = msg[key];
+      if (v != null && v.toString().isNotEmpty) {
+        return ApiEndpoints.getImageUrl(v.toString());
+      }
+    }
+    return null;
+  }
+
   Future<void> _sendMessage() async {
     final body = _controller.text.trim();
-    if (body.isEmpty) return;
-    _controller.clear();
-    setState(() => _sending = true);
+    final imageFile = _pendingImage;
+    if (body.isEmpty && imageFile == null) return;
+    if (_sending) return;
 
-    final tempMsg = {
-      'id': 'temp-${DateTime.now().millisecondsSinceEpoch}',
-      'body': body,
-      'senderId': _currentUserId,
-      'createdAt': DateTime.now().toIso8601String(),
-      'isSent': true,
-    };
+    final tempId = 'temp-${DateTime.now().millisecondsSinceEpoch}';
+    final localPath = imageFile?.path;
+    _controller.clear();
     setState(() {
-      _messages.add(tempMsg);
-      _sending = false;
+      _pendingImage = null;
+      _sending = true;
+      _messages.add({
+        'id': tempId,
+        'body': body,
+        if (localPath != null) 'localImagePath': localPath,
+        'senderId': _currentUserId,
+        'createdAt': DateTime.now().toIso8601String(),
+        'isSent': true,
+      });
     });
     _scrollToBottom();
 
     try {
       final sent = await ChatService.instance.sendMessage(
         widget.conversationId,
-        body: body,
+        body: body.isEmpty ? null : body,
+        imageFile: imageFile,
       );
       if (mounted) {
-        final idx = _messages.indexWhere((m) => m['id'] == tempMsg['id']);
+        final idx = _messages.indexWhere((m) => m['id'] == tempId);
         if (idx >= 0) {
           setState(() {
             _messages[idx] = {
               ..._messages[idx],
               ...sent,
-              'id': sent['id'] ?? tempMsg['id'],
+              'id': sent['id'] ?? tempId,
             };
+            _messages[idx].remove('localImagePath');
           });
         }
       }
     } catch (e) {
       if (mounted) {
-        final idx = _messages.indexWhere((m) => m['id'] == tempMsg['id']);
+        final idx = _messages.indexWhere((m) => m['id'] == tempId);
         if (idx >= 0) {
           setState(() => _messages[idx]['failed'] = true);
         }
       }
+    } finally {
+      if (mounted) setState(() => _sending = false);
     }
   }
 
@@ -326,6 +414,10 @@ class _ChatMessagesScreenState extends State<ChatMessagesScreen> {
     final isMe = senderId == _currentUserId;
     final createdAt = msg['createdAt'] ?? msg['created_at'];
     final failed = msg['failed'] == true;
+    final remoteUrl = _messageImageUrl(msg);
+    final localPath = msg['localImagePath']?.toString();
+    final hasImage = (remoteUrl != null && remoteUrl.isNotEmpty) ||
+        (localPath != null && localPath.isNotEmpty);
 
     return Align(
       alignment: isMe
@@ -357,14 +449,59 @@ class _ChatMessagesScreenState extends State<ChatMessagesScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            Text(
-              body,
-              style: GoogleFonts.cairo(
-                fontSize: 15,
-                color: isMe ? Colors.white : AppColors.foreground,
-                height: 1.4,
+            if (hasImage) ...[
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: ConstrainedBox(
+                  constraints:
+                      const BoxConstraints(maxWidth: 220, maxHeight: 280),
+                  child: localPath != null && localPath.isNotEmpty
+                      ? Image.file(
+                          File(localPath),
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) =>
+                              const Icon(Icons.broken_image),
+                        )
+                      : remoteUrl != null && remoteUrl.isNotEmpty
+                          ? Image.network(
+                              remoteUrl,
+                              fit: BoxFit.cover,
+                              loadingBuilder:
+                                  (context, child, loadingProgress) {
+                                if (loadingProgress == null) return child;
+                                return SizedBox(
+                                  height: 120,
+                                  child: Center(
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: isMe
+                                          ? Colors.white70
+                                          : AppColors.purple,
+                                    ),
+                                  ),
+                                );
+                              },
+                              errorBuilder: (_, __, ___) => Icon(
+                                Icons.broken_image_rounded,
+                                color: isMe
+                                    ? Colors.white70
+                                    : AppColors.mutedForeground,
+                              ),
+                            )
+                          : const SizedBox.shrink(),
+                ),
               ),
-            ),
+              if (body.isNotEmpty) const SizedBox(height: 8),
+            ],
+            if (body.isNotEmpty)
+              Text(
+                body,
+                style: GoogleFonts.cairo(
+                  fontSize: 15,
+                  color: isMe ? Colors.white : AppColors.foreground,
+                  height: 1.4,
+                ),
+              ),
             const SizedBox(height: 4),
             Row(
               mainAxisSize: MainAxisSize.min,
@@ -396,51 +533,106 @@ class _ChatMessagesScreenState extends State<ChatMessagesScreen> {
   }
 
   Widget _buildInputBar(bool isAr) {
+    final canSend = !_sending &&
+        (_pendingImage != null || _controller.text.trim().isNotEmpty);
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       color: Colors.white,
       child: SafeArea(
-        child: Row(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Expanded(
-              child: TextField(
-                controller: _controller,
-                decoration: InputDecoration(
-                  hintText: isAr ? 'اكتب رسالة...' : 'Type a message...',
-                  border: OutlineInputBorder(
+            if (_pendingImage != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.file(
+                        _pendingImage!,
+                        width: 56,
+                        height: 56,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      onPressed: _sending
+                          ? null
+                          : () => setState(() => _pendingImage = null),
+                      icon: const Icon(Icons.close_rounded),
+                      tooltip: isAr ? 'إزالة' : 'Remove',
+                    ),
+                  ],
+                ),
+              ),
+            Row(
+              children: [
+                IconButton(
+                  onPressed:
+                      _sending ? null : () => _showImageSourceSheet(isAr),
+                  icon: const Icon(Icons.image_rounded),
+                  color: AppColors.purple,
+                  tooltip: isAr ? 'إرفاق صورة' : 'Attach image',
+                ),
+                Expanded(
+                  child: TextField(
+                    controller: _controller,
+                    onChanged: (_) => setState(() {}),
+                    decoration: InputDecoration(
+                      hintText: isAr ? 'اكتب رسالة...' : 'Type a message...',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(24),
+                        borderSide: BorderSide.none,
+                      ),
+                      filled: true,
+                      fillColor: AppColors.beige,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 12,
+                      ),
+                    ),
+                    style: GoogleFonts.cairo(fontSize: 15),
+                    maxLines: 4,
+                    minLines: 1,
+                    textInputAction: TextInputAction.send,
+                    onSubmitted: (_) {
+                      if (canSend) _sendMessage();
+                    },
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Material(
+                  color: canSend
+                      ? AppColors.purple
+                      : AppColors.purple.withOpacity(0.4),
+                  borderRadius: BorderRadius.circular(24),
+                  child: InkWell(
+                    onTap: canSend ? _sendMessage : null,
                     borderRadius: BorderRadius.circular(24),
-                    borderSide: BorderSide.none,
-                  ),
-                  filled: true,
-                  fillColor: AppColors.beige,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 12,
-                  ),
-                ),
-                style: GoogleFonts.cairo(fontSize: 15),
-                maxLines: 4,
-                minLines: 1,
-                textInputAction: TextInputAction.send,
-                onSubmitted: (_) => _sendMessage(),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Material(
-              color: AppColors.purple,
-              borderRadius: BorderRadius.circular(24),
-              child: InkWell(
-                onTap: _sending ? null : _sendMessage,
-                borderRadius: BorderRadius.circular(24),
-                child: const Padding(
-                  padding: EdgeInsets.all(12),
-                  child: Icon(
-                    Icons.send_rounded,
-                    color: Colors.white,
-                    size: 24,
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: _sending
+                          ? SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white.withOpacity(0.9),
+                              ),
+                            )
+                          : const Icon(
+                              Icons.send_rounded,
+                              color: Colors.white,
+                              size: 24,
+                            ),
+                    ),
                   ),
                 ),
-              ),
+              ],
             ),
           ],
         ),

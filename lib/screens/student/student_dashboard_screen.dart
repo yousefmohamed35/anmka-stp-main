@@ -191,79 +191,16 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
     final certificates = _statistics?['certificates_earned'] ?? 0;
     final totalHours = _statistics?['total_learning_hours'] ?? 0;
     final l10n = AppLocalizations.of(context)!;
+    final locale = Localizations.localeOf(context).languageCode;
 
-    // Get student type from profile
-    final studentType = _profile?['studentType'] as String? ??
-        _profile?['student_type'] as String?;
-
-    // Build all menu items
-    final allMenuItems = [
-      {
-        'icon': Icons.menu_book_rounded,
-        'label': l10n.enrolledLessons,
-        'subtitle': l10n.activeCourse(enrolledCourses),
-        'color': const Color(0xFF7C3AED),
-        'bgColor': const Color(0xFFEDE9FE),
-        'onTap': () => context.push(RouteNames.enrolled),
-        'showFor': ['online', 'offline'], // Show for both
-      },
-      {
-        'icon': Icons.assignment_rounded,
-        'label': l10n.myExams,
-        'subtitle': l10n.viewAllExams,
-        'color': const Color(0xFFF97316),
-        'bgColor': const Color(0xFFFFF7ED),
-        'onTap': () => context.push(RouteNames.myExams),
-        'showFor': ['online', 'offline'], // Show for both
-      },
-      {
-        'icon': Icons.videocam_rounded,
-        'label': l10n.liveCourses,
-        'subtitle': l10n.comingSoon,
-        'color': const Color(0xFF10B981),
-        'bgColor': const Color(0xFFD1FAE5),
-        'onTap': () => context.push(RouteNames.liveCourses),
-        'showFor': ['online'], // Only for online
-      },
-      {
-        'icon': Icons.emoji_events_rounded,
-        'label': l10n.certificates,
-        'subtitle': '$certificates ${l10n.certificates}',
-        'color': const Color(0xFFEAB308),
-        'bgColor': const Color(0xFFFEF9C3),
-        'onTap': () => context.push(RouteNames.certificates),
-        'showFor': ['online', 'offline'], // Show for both
-      },
-      {
-        'icon': Icons.download_rounded,
-        'label': l10n.downloads,
-        'subtitle': l10n.savedFiles,
-        'color': const Color(0xFF3B82F6),
-        'bgColor': const Color(0xFFDBEAFE),
-        'onTap': () => context.push(RouteNames.downloads),
-        'showFor': ['online'], // Only for online
-      },
-      {
-        'icon': Icons.qr_code_scanner_rounded,
-        'label': l10n.centerAttendance,
-        'subtitle': l10n.scanQrCodeInstruction,
-        'color': const Color(0xFF8B5CF6),
-        'bgColor': const Color(0xFFF3E8FF),
-        'onTap': () => context.push(RouteNames.centerAttendance),
-        'showFor': ['offline'], // Only for offline
-      },
+    final accountMenuItems = [
       {
         'icon': Icons.chat_bubble_rounded,
-        'label': Localizations.localeOf(context).languageCode == 'ar'
-            ? 'المحادثات'
-            : 'Chat',
-        'subtitle': Localizations.localeOf(context).languageCode == 'ar'
-            ? 'تواصل مع المعلمين'
-            : 'Message teachers',
+        'label': locale == 'ar' ? 'المحادثات' : 'Chat',
+        'subtitle': locale == 'ar' ? 'تواصل مع المعلمين' : 'Message teachers',
         'color': AppColors.purple,
         'bgColor': AppColors.purple.withOpacity(0.12),
         'onTap': () => context.push(RouteNames.chatConversations),
-        'showFor': ['online', 'offline'], // Show for both
       },
       {
         'icon': Icons.settings_rounded,
@@ -272,17 +209,8 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
         'color': const Color(0xFF6B7280),
         'bgColor': const Color(0xFFF3F4F6),
         'onTap': () => context.push(RouteNames.settings),
-        'showFor': ['online', 'offline'], // Show for both
       },
     ];
-
-    // Filter menu items based on student type
-    final menuItems = allMenuItems.where((item) {
-      final showFor = item['showFor'] as List<String>;
-      // If studentType is null, show all items (fallback)
-      if (studentType == null) return true;
-      return showFor.contains(studentType);
-    }).toList();
 
     return Scaffold(
       backgroundColor: AppColors.beige,
@@ -304,7 +232,7 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              AppLocalizations.of(context)!.mainMenu,
+                              l10n.mainMenu,
                               style: GoogleFonts.cairo(
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
@@ -312,8 +240,6 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                               ),
                             ),
                             const SizedBox(height: 16),
-
-                            // Menu Grid
                             GridView.builder(
                               shrinkWrap: true,
                               physics: const NeverScrollableScrollPhysics(),
@@ -324,9 +250,9 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                                 crossAxisSpacing: 12,
                                 childAspectRatio: 1.1,
                               ),
-                              itemCount: menuItems.length,
+                              itemCount: accountMenuItems.length,
                               itemBuilder: (context, index) {
-                                final item = menuItems[index];
+                                final item = accountMenuItems[index];
                                 return _buildMenuItem(
                                   icon: item['icon'] as IconData,
                                   label: item['label'] as String,
@@ -337,8 +263,8 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                                 );
                               },
                             ),
-
-                            const SizedBox(height: 24),
+                            const SizedBox(height: 20),
+                            const SizedBox(height: 8),
 
                             // Logout Button
                             GestureDetector(
@@ -385,6 +311,7 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                                 ),
                               ),
                             ),
+                            _buildPoweredByFooter(),
                           ],
                         ),
                       ),
@@ -395,6 +322,31 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
           // Bottom Navigation
           const BottomNav(activeTab: 'dashboard'),
         ],
+      ),
+    );
+  }
+
+  Widget _buildPoweredByFooter() {
+    return Center(
+      child: Text.rich(
+        TextSpan(
+          text: 'Powered by ',
+          style: GoogleFonts.cairo(
+            fontSize: 16,
+            color: AppColors.mutedForeground,
+            fontWeight: FontWeight.w500,
+          ),
+          children: [
+            TextSpan(
+              text: 'Anmka',
+              style: GoogleFonts.cairo(
+                fontSize: 20,
+                color: AppColors.primary,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

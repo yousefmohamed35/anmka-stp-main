@@ -18,10 +18,6 @@ class YoutubeVideoService {
 
       // Pick highest MP4 progressive stream (video + audio)
       final streamInfo = manifest.muxed.withHighestBitrate();
-      if (streamInfo == null) {
-        print('❌ No muxed MP4 stream found for $youtubeUrl');
-        return null;
-      }
 
       final directUrl = streamInfo.url.toString();
       print('🎥 YouTube direct stream URL: $directUrl');

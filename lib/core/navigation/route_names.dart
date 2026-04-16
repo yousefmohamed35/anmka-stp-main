@@ -9,6 +9,7 @@ class RouteNames {
   static const String login = '/login';
   static const String register = '/register';
   static const String forgotPassword = '/forgot-password';
+  static const String verifyEmailPending = '/verify-email-pending';
 
   // Student flow (main app with bottom nav)
   static const String home = '/home';
@@ -30,6 +31,9 @@ class RouteNames {
   static const String categories = '/categories';
   static const String courseDetails = '/course-details';
   static const String lessonViewer = '/lesson-viewer';
+
+  /// Debug / QA: fixed YouTube URL to verify playback pipeline.
+  static const String youtubeVideoTest = '/youtube-video-test';
   static const String exams = '/exams';
   static const String myExams = '/my-exams';
   static const String notifications = '/notifications';

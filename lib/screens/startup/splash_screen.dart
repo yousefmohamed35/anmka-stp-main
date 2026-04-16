@@ -552,12 +552,13 @@ class _SplashScreenState extends State<SplashScreen>
               colors: [Colors.white, Color(0xFFE0D4FF)],
             ).createShader(bounds),
             child: Text(
-              'STP',
+              'الباشميكانيكا',
+              textAlign: TextAlign.center,
               style: GoogleFonts.cairo(
-                fontSize: 38,
+                fontSize: 32,
                 fontWeight: FontWeight.bold,
                 color: Colors.white,
-                letterSpacing: 2,
+                height: 1.2,
               ),
             ),
           ),

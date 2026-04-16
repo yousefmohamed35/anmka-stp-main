@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import '../core/api/api_client.dart';
 import '../core/api/api_endpoints.dart';
@@ -91,17 +93,36 @@ class ChatService {
     }
   }
 
-  /// Send a message.
+  /// Send a text message, an image, or both.
+  ///
+  /// - Text-only: JSON `POST` with `{ "body": "..." }`.
+  /// - With [imageFile]: `multipart/form-data` with field `body` (may be empty)
+  ///   and file field `image`.
   Future<Map<String, dynamic>> sendMessage(
     String conversationId, {
-    required String body,
+    String? body,
+    File? imageFile,
   }) async {
+    final text = body?.trim() ?? '';
+    if (imageFile == null && text.isEmpty) {
+      throw Exception('Message cannot be empty');
+    }
     try {
-      final response = await ApiClient.instance.post(
-        ApiEndpoints.chatMessages(conversationId),
-        body: {'body': body},
-        requireAuth: true,
-      );
+      final Map<String, dynamic> response;
+      if (imageFile != null) {
+        response = await ApiClient.instance.postMultipart(
+          ApiEndpoints.chatMessages(conversationId),
+          fields: {'body': text},
+          files: {'image': imageFile},
+          requireAuth: true,
+        );
+      } else {
+        response = await ApiClient.instance.post(
+          ApiEndpoints.chatMessages(conversationId),
+          body: {'body': text},
+          requireAuth: true,
+        );
+      }
       if (response['success'] == true) {
         final data = response['data'];
         if (data is Map<String, dynamic>) return data;

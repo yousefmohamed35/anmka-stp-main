@@ -10,6 +10,7 @@ import '../../core/navigation/route_names.dart';
 import '../../core/api/api_endpoints.dart';
 import '../../services/profile_service.dart';
 import '../../services/qr_code_service.dart';
+import '../../services/video_download_service.dart';
 import '../../core/config/theme_provider.dart';
 import '../../l10n/app_localizations.dart';
 
@@ -54,6 +55,90 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void _onThemeChanged() {
     if (mounted) {
       setState(() {});
+    }
+  }
+
+  Future<void> _confirmAndClearAllOfflineVideos() async {
+    final l10n = AppLocalizations.of(context)!;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(
+          l10n.clearAllOfflineVideosConfirmTitle,
+          style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          l10n.clearAllOfflineVideosConfirmBody,
+          style: GoogleFonts.cairo(),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(l10n.cancel, style: GoogleFonts.cairo()),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: Text(l10n.delete, style: GoogleFonts.cairo()),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          content: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(width: 20),
+              Expanded(
+                child: Text(
+                  l10n.clearAllOfflineVideosProgress,
+                  style: GoogleFonts.cairo(),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    try {
+      final svc = VideoDownloadService();
+      await svc.initialize();
+      final cleared = await svc.clearAllDownloadedVideos();
+      if (mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              cleared == 0
+                  ? l10n.clearAllOfflineVideosNothing
+                  : l10n.clearAllOfflineVideosSuccess(cleared),
+              style: GoogleFonts.cairo(),
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              l10n.clearAllOfflineVideosFailed,
+              style: GoogleFonts.cairo(),
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -480,11 +565,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         },
                       ),
 
-                      // Privacy setting
                       _buildSettingItem(
-                        icon: Icons.shield,
-                        label: AppLocalizations.of(context)!.privacyAndSecurity,
+                        icon: Icons.delete_sweep_rounded,
+                        label:
+                            AppLocalizations.of(context)!.clearAllOfflineVideos,
+                        onTap: _confirmAndClearAllOfflineVideos,
                       ),
+
+                      if (kDebugMode)
+                        _buildSettingItem(
+                          icon: Icons.smart_display_rounded,
+                          label: Localizations.localeOf(context).languageCode ==
+                                  'ar'
+                              ? 'اختبار فيديو يوتيوب'
+                              : 'YouTube video test',
+                          onTap: () =>
+                              context.push(RouteNames.youtubeVideoTest),
+                        ),
+
+                      // Privacy setting
+                      // _buildSettingItem(
+                      //   icon: Icons.shield,
+                      //   label: AppLocalizations.of(context)!.privacyAndSecurity,
+                      // ),
 
                       // Help setting
                       _buildSettingItem(

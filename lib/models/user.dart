@@ -10,6 +10,10 @@ class User {
   final String? avatarThumbnail;
   final String role;
   final bool isVerified;
+
+  /// Whether the user has verified their email (see `email_verified` from API).
+  /// When the API omits this field, defaults to true for backward compatibility.
+  final bool emailVerified;
   final String createdAt;
   final String? studentType; // "online" or "offline"
 
@@ -22,6 +26,7 @@ class User {
     this.avatarThumbnail,
     required this.role,
     required this.isVerified,
+    required this.emailVerified,
     required this.createdAt,
     this.studentType,
   });
@@ -35,7 +40,15 @@ class User {
       print('  name: ${json['name']}');
       print('  status: ${json['status']}');
     }
-    
+
+    final hasEmailVerifiedKey =
+        json.containsKey('email_verified') || json.containsKey('emailVerified');
+    final emailVerified = hasEmailVerifiedKey
+        ? (json['email_verified'] as bool? ??
+            json['emailVerified'] as bool? ??
+            false)
+        : true;
+
     return User(
       id: json['id'] as String? ?? '',
       name: json['name'] as String? ?? json['nameAr'] as String? ?? '',
@@ -45,8 +58,10 @@ class User {
       avatarThumbnail: json['avatar_thumbnail'] as String?,
       role: json['role'] as String? ?? 'student',
       isVerified: json['is_verified'] as bool? ?? false,
+      emailVerified: emailVerified,
       createdAt: json['created_at'] as String? ?? '',
-      studentType: json['studentType'] as String? ?? json['student_type'] as String?,
+      studentType:
+          json['studentType'] as String? ?? json['student_type'] as String?,
     );
   }
 
@@ -60,9 +75,9 @@ class User {
       'avatar_thumbnail': avatarThumbnail,
       'role': role,
       'is_verified': isVerified,
+      'email_verified': emailVerified,
       'created_at': createdAt,
       'studentType': studentType,
     };
   }
 }
-

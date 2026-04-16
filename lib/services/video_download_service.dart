@@ -3,8 +3,6 @@ import 'dart:io';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:permission_handler/permission_handler.dart';
-import 'package:device_info_plus/device_info_plus.dart';
 import '../core/services/download_manager.dart';
 import '../models/download_model.dart';
 import '../services/token_storage_service.dart';
@@ -68,103 +66,11 @@ class VideoDownloadService {
     );
   }
 
-  // Request storage permission
-  Future<bool> requestPermission() async {
-    try {
-      if (Platform.isAndroid) {
-        final androidInfo = await DeviceInfoPlugin().androidInfo;
-        final sdkInt = androidInfo.version.sdkInt;
+  /// Downloads are stored under the app support directory ([DownloadManager]);
+  /// no READ_MEDIA_* or legacy storage permission is required.
+  Future<bool> requestPermission() async => true;
 
-        if (sdkInt >= 33) {
-          // Android 13+
-          final videoStatus = await Permission.videos.status;
-          final audioStatus = await Permission.audio.status;
-          final photoStatus = await Permission.photos.status;
-
-          if (videoStatus == PermissionStatus.granted ||
-              audioStatus == PermissionStatus.granted ||
-              photoStatus == PermissionStatus.granted) {
-            return true;
-          }
-
-          final videoStatusAfter = await Permission.videos.request();
-          final audioStatusAfter = await Permission.audio.request();
-          final photoStatusAfter = await Permission.photos.request();
-
-          return videoStatusAfter == PermissionStatus.granted ||
-              audioStatusAfter == PermissionStatus.granted ||
-              photoStatusAfter == PermissionStatus.granted;
-        } else if (sdkInt >= 30) {
-          // Android 11-12
-          final manageStorageStatus =
-              await Permission.manageExternalStorage.status;
-          if (manageStorageStatus == PermissionStatus.granted) {
-            return true;
-          }
-
-          final storageStatus = await Permission.storage.status;
-          if (storageStatus == PermissionStatus.granted) {
-            return true;
-          }
-
-          final manageStorageStatusAfter =
-              await Permission.manageExternalStorage.request();
-          if (manageStorageStatusAfter == PermissionStatus.granted) {
-            return true;
-          }
-
-          final storageStatusAfter = await Permission.storage.request();
-          return storageStatusAfter == PermissionStatus.granted;
-        } else {
-          // Android 10 and below
-          final storageStatus = await Permission.storage.status;
-          if (storageStatus == PermissionStatus.granted) {
-            return true;
-          }
-
-          final storageStatusAfter = await Permission.storage.request();
-          return storageStatusAfter == PermissionStatus.granted;
-        }
-      }
-      return true; // iOS doesn't need explicit permission for app documents
-    } catch (e) {
-      print('Error requesting permission: $e');
-      return false;
-    }
-  }
-
-  // Check current permission status
-  Future<bool> hasStoragePermission() async {
-    if (Platform.isAndroid) {
-      final androidInfo = await DeviceInfoPlugin().androidInfo;
-
-      if (androidInfo.version.sdkInt >= 33) {
-        // Android 13+
-        final videoStatus = await Permission.videos.status;
-        final audioStatus = await Permission.audio.status;
-        final photoStatus = await Permission.photos.status;
-
-        return videoStatus == PermissionStatus.granted ||
-            audioStatus == PermissionStatus.granted ||
-            photoStatus == PermissionStatus.granted;
-      } else if (androidInfo.version.sdkInt >= 30) {
-        // Android 11-12
-        final manageStorageStatus =
-            await Permission.manageExternalStorage.status;
-        if (manageStorageStatus == PermissionStatus.granted) {
-          return true;
-        }
-
-        final storageStatus = await Permission.storage.status;
-        return storageStatus == PermissionStatus.granted;
-      } else {
-        // Android 10 and below
-        final storageStatus = await Permission.storage.status;
-        return storageStatus == PermissionStatus.granted;
-      }
-    }
-    return true; // iOS doesn't need explicit permission for app documents
-  }
+  Future<bool> hasStoragePermission() async => true;
 
   /// تحميل فيديو باستخدام DownloadManager
   Future<String?> downloadVideoWithManager({
@@ -451,6 +357,38 @@ class VideoDownloadService {
     } catch (e) {
       print('❌ Error deleting video: $e');
       return false;
+    }
+  }
+
+  /// Deletes every offline lesson video file on this device and clears the local DB.
+  /// Returns how many download records were cleared (same as rows deleted from DB).
+  Future<int> clearAllDownloadedVideos() async {
+    try {
+      if (_database == null) {
+        await _initializeDatabase();
+      }
+
+      final results = await _database?.query(_tableName) ?? [];
+      final rowCount = results.length;
+
+      for (final row in results) {
+        final localPath = row['local_path'] as String?;
+        if (localPath == null || localPath.isEmpty) continue;
+        try {
+          final file = File(localPath);
+          if (await file.exists()) {
+            await file.delete();
+          }
+        } catch (e) {
+          print('clearAllDownloadedVideos: could not delete $localPath: $e');
+        }
+      }
+
+      await _database?.delete(_tableName);
+      return rowCount;
+    } catch (e) {
+      print('❌ clearAllDownloadedVideos: $e');
+      rethrow;
     }
   }
 

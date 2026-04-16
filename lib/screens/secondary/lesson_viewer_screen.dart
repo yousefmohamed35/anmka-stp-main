@@ -10,6 +10,7 @@ import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:pod_player/pod_player.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:youtube_explode_dart/youtube_explode_dart.dart';
 import '../../core/design/app_colors.dart';
 import '../../core/navigation/route_names.dart';
 import '../../services/courses_service.dart';
@@ -40,6 +41,250 @@ class _LessonViewerScreenState extends State<LessonViewerScreen> {
   bool _isDownloading = false;
   int _downloadProgress = 0;
   bool _isDownloaded = false;
+  String? _lastYoutubeUrl;
+  Map<String, String> _youtubeQualityUrls = {};
+  String? _selectedQuality;
+  bool _isLoadingQualities = false;
+
+  String _youtubeQualityHeightLabel(String heightKey) {
+    final h = int.tryParse(heightKey) ?? 0;
+    switch (h) {
+      case 1080:
+        return '1080p FHD';
+      case 720:
+        return '720p HD';
+      case 480:
+        return '480p';
+      case 360:
+        return '360p';
+      case 240:
+        return '240p';
+      case 144:
+        return '144p';
+      default:
+        return '${h}p';
+    }
+  }
+
+  String _qualityPickerButtonLabel() {
+    if (_selectedQuality != null) {
+      return _youtubeQualityHeightLabel(_selectedQuality!);
+    }
+    if (_youtubeQualityUrls.isNotEmpty) {
+      final heights = _youtubeQualityUrls.keys.map(int.parse).toList()
+        ..sort((a, b) => b.compareTo(a));
+      return _youtubeQualityHeightLabel(heights.first.toString());
+    }
+    return 'الجودة';
+  }
+
+  Future<void> _fetchYoutubeQualities(String youtubeUrl) async {
+    YoutubeExplode? yt;
+    try {
+      if (!mounted) return;
+      setState(() {
+        _isLoadingQualities = true;
+        _youtubeQualityUrls = {};
+      });
+
+      yt = YoutubeExplode();
+      final video = await yt.videos.get(youtubeUrl);
+      final manifest = await yt.videos.streamsClient.getManifest(video.id);
+      final muxedList = List<MuxedStreamInfo>.from(manifest.muxed);
+
+      muxedList.sort((a, b) {
+        final h = b.videoResolution.height.compareTo(a.videoResolution.height);
+        if (h != 0) return h;
+        return b.bitrate.bitsPerSecond.compareTo(a.bitrate.bitsPerSecond);
+      });
+
+      final seenHeights = <int>{};
+      final urlMap = <String, String>{};
+      for (final s in muxedList) {
+        final height = s.videoResolution.height;
+        if (seenHeights.contains(height)) continue;
+        seenHeights.add(height);
+        urlMap[height.toString()] = s.url.toString();
+      }
+
+      if (urlMap.isEmpty) {
+        if (kDebugMode) {
+          print('⚠️ No muxed streams for YouTube video; using pod fallback.');
+        }
+        if (!mounted) return;
+        setState(() {
+          _isLoadingQualities = false;
+        });
+        await _playYoutubeDefault(youtubeUrl);
+        return;
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _isLoadingQualities = false;
+        _youtubeQualityUrls = urlMap;
+      });
+
+      final sortedKeys = urlMap.keys.map(int.parse).toList()
+        ..sort((a, b) => b.compareTo(a));
+      final bestKey = sortedKeys.first.toString();
+      await _switchToQuality(bestKey);
+    } catch (e, st) {
+      if (kDebugMode) {
+        print('❌ _fetchYoutubeQualities failed: $e');
+        print(st);
+      }
+      if (!mounted) return;
+      setState(() {
+        _isLoadingQualities = false;
+      });
+      await _playYoutubeDefault(youtubeUrl);
+    } finally {
+      yt?.close();
+    }
+  }
+
+  Future<void> _switchToQuality(String qualityKey) async {
+    final url = _youtubeQualityUrls[qualityKey];
+    if (url == null || url.isEmpty) return;
+
+    final savedPosition =
+        _controller?.videoPlayerValue?.position ?? Duration.zero;
+
+    _controller?.dispose();
+    _controller = null;
+
+    if (!mounted) return;
+    setState(() {
+      _isVideoLoading = true;
+      _selectedQuality = qualityKey;
+    });
+
+    try {
+      _controller = PodPlayerController(
+        playVideoFrom: PlayVideoFrom.network(url),
+        podPlayerConfig: const PodPlayerConfig(
+          autoPlay: false,
+          isLooping: false,
+        ),
+      );
+      await _controller!.initialise();
+      if (savedPosition > Duration.zero) {
+        await _controller!.videoSeekTo(savedPosition);
+      }
+      if (!mounted) return;
+      setState(() {
+        _isVideoLoading = false;
+      });
+    } catch (e, st) {
+      if (kDebugMode) {
+        print('❌ _switchToQuality failed: $e');
+        print(st);
+      }
+      if (!mounted) return;
+      setState(() {
+        _isVideoLoading = false;
+      });
+      final fallbackUrl = _lastYoutubeUrl;
+      if (fallbackUrl != null && fallbackUrl.isNotEmpty) {
+        await _playYoutubeDefault(fallbackUrl);
+      }
+    }
+  }
+
+  Widget _buildQualityPicker() {
+    final heights = _youtubeQualityUrls.keys.map(int.parse).toList()
+      ..sort((a, b) => b.compareTo(a));
+
+    final selected = _selectedQuality;
+    final borderAccent = selected != null
+        ? AppColors.purple
+        : Colors.white.withValues(alpha: 0.7);
+
+    return PopupMenuButton<String>(
+      tooltip: 'الجودة',
+      color: const Color(0xFF1A1A2E),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      onSelected: (q) => _switchToQuality(q),
+      itemBuilder: (context) {
+        return heights.map((h) {
+          final q = h.toString();
+          final isSelected = selected == q;
+          return PopupMenuItem<String>(
+            value: q,
+            child: Row(
+              children: [
+                Icon(
+                  isSelected
+                      ? Icons.radio_button_checked
+                      : Icons.radio_button_unchecked,
+                  color: isSelected ? AppColors.purple : Colors.white54,
+                  size: 18,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    _youtubeQualityHeightLabel(q),
+                    style: GoogleFonts.cairo(
+                      color: Colors.white,
+                      fontWeight:
+                          isSelected ? FontWeight.bold : FontWeight.normal,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+                if (h == 720 || h == 1080)
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: AppColors.purple.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      'HD',
+                      style: GoogleFonts.cairo(
+                        color: AppColors.purple,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          );
+        }).toList();
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.45),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: borderAccent, width: 1.2),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.hd_rounded,
+              color: selected != null ? AppColors.purple : Colors.white,
+              size: 22,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              _qualityPickerButtonLabel(),
+              style: GoogleFonts.cairo(
+                color: selected != null ? AppColors.purple : Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const Icon(Icons.arrow_drop_down, color: Colors.white70),
+          ],
+        ),
+      ),
+    );
+  }
 
   @override
   void initState() {
@@ -51,6 +296,12 @@ class _LessonViewerScreenState extends State<LessonViewerScreen> {
       _initializeVideo();
       _checkIfDownloaded();
     });
+  }
+
+  @override
+  void deactivate() {
+    _controller?.pause();
+    super.deactivate();
   }
 
   Future<void> _initializeDownloadService() async {
@@ -224,24 +475,7 @@ class _LessonViewerScreenState extends State<LessonViewerScreen> {
           if (kDebugMode) {
             print('📺 Using YouTube URL: $videoUrl');
           }
-          _controller = PodPlayerController(
-            playVideoFrom: PlayVideoFrom.youtube(videoUrl),
-            podPlayerConfig: const PodPlayerConfig(
-              autoPlay: false,
-              isLooping: false,
-            ),
-          )..initialise().then((_) {
-              if (mounted) {
-                setState(() => _isVideoLoading = false);
-              }
-            }).catchError((error) {
-              if (kDebugMode) {
-                print('❌ Error initializing YouTube video: $error');
-              }
-              if (mounted) {
-                setState(() => _isVideoLoading = false);
-              }
-            });
+          await _initializeYoutubeVideo(videoUrl);
         } else {
           // Direct video URL from server - use pod_player with network
           if (kDebugMode) {
@@ -255,24 +489,7 @@ class _LessonViewerScreenState extends State<LessonViewerScreen> {
           print('📺 Using YouTube ID fallback: $videoId');
         }
         final youtubeUrl = 'https://www.youtube.com/watch?v=$videoId';
-        _controller = PodPlayerController(
-          playVideoFrom: PlayVideoFrom.youtube(youtubeUrl),
-          podPlayerConfig: const PodPlayerConfig(
-            autoPlay: false,
-            isLooping: false,
-          ),
-        )..initialise().then((_) {
-            if (mounted) {
-              setState(() => _isVideoLoading = false);
-            }
-          }).catchError((error) {
-            if (kDebugMode) {
-              print('❌ Error initializing YouTube video by ID: $error');
-            }
-            if (mounted) {
-              setState(() => _isVideoLoading = false);
-            }
-          });
+        await _initializeYoutubeVideo(youtubeUrl);
       } else {
         // No valid video source
         if (kDebugMode) {
@@ -290,6 +507,69 @@ class _LessonViewerScreenState extends State<LessonViewerScreen> {
         setState(() => _isVideoLoading = false);
       }
     }
+  }
+
+  Future<void> _initializeYoutubeVideo(String youtubeUrl) async {
+    try {
+      _lastYoutubeUrl = youtubeUrl;
+      _controller?.dispose();
+      _controller = null;
+      if (!mounted) return;
+      setState(() {
+        _useWebViewFallback = false;
+        _isVideoLoading = true;
+        _youtubeQualityUrls = {};
+        _selectedQuality = null;
+      });
+
+      if (kDebugMode) {
+        print('═══════════════════════════════════════════════════════════');
+        print('📺 YouTube: fetching muxed qualities (youtube_explode_dart)');
+        print('Source URL: $youtubeUrl');
+        print('═══════════════════════════════════════════════════════════');
+      }
+
+      await _fetchYoutubeQualities(youtubeUrl);
+    } catch (e) {
+      if (kDebugMode) {
+        print('❌ Error initializing YouTube playback: $e');
+      }
+      await _playYoutubeDefault(youtubeUrl);
+    }
+  }
+
+  Future<void> _playYoutubeDefault(String youtubeUrl) async {
+    _controller?.dispose();
+    _controller = null;
+    if (!mounted) return;
+    setState(() {
+      _youtubeQualityUrls = {};
+      _selectedQuality = null;
+      _isLoadingQualities = false;
+      _isVideoLoading = true;
+    });
+
+    _controller = PodPlayerController(
+      playVideoFrom: PlayVideoFrom.youtube(youtubeUrl),
+      podPlayerConfig: const PodPlayerConfig(
+        autoPlay: false,
+        isLooping: false,
+      ),
+    );
+
+    _controller!.initialise().then((_) {
+      if (!mounted) return;
+      setState(() {
+        _isVideoLoading = false;
+      });
+    }).catchError((error) {
+      if (kDebugMode) {
+        print('❌ Error initializing YouTube fallback: $error');
+      }
+      if (mounted) {
+        setState(() => _isVideoLoading = false);
+      }
+    });
   }
 
   /// Initialize direct video playback using pod_player
@@ -314,6 +594,14 @@ class _LessonViewerScreenState extends State<LessonViewerScreen> {
         if (kDebugMode) {
           print('🔑 Added token to video URL');
         }
+      }
+
+      if (mounted) {
+        setState(() {
+          _youtubeQualityUrls = {};
+          _selectedQuality = null;
+          _isLoadingQualities = false;
+        });
       }
 
       // Use pod_player with PlayVideoFrom.network()
@@ -903,6 +1191,23 @@ class _LessonViewerScreenState extends State<LessonViewerScreen> {
                     ],
                   ),
                 ),
+                if (_isLoadingQualities)
+                  const Padding(
+                    padding: EdgeInsets.only(left: 8),
+                    child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppColors.purple,
+                      ),
+                    ),
+                  )
+                else if (_youtubeQualityUrls.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 8),
+                    child: _buildQualityPicker(),
+                  ),
               ],
             ),
           ),
@@ -1401,23 +1706,7 @@ class _LessonViewerScreenState extends State<LessonViewerScreen> {
       return;
     }
 
-    // التحقق من الصلاحيات
-    final hasPermission = await _downloadService.hasStoragePermission();
-    if (!hasPermission) {
-      final granted = await _downloadService.requestPermission();
-      if (!granted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              'يجب منح صلاحيات التخزين لتحميل الفيديوهات',
-              style: GoogleFonts.cairo(),
-            ),
-            backgroundColor: Colors.orange,
-          ),
-        );
-        return;
-      }
-    }
+    // التحميل يُحفظ في مجلد التطبيق الخاص — لا يحتاج صلاحيات التخزين/الوسائط.
 
     // الحصول على رابط الفيديو (نفس منطق التشغيل، مع تنظيف الرابط)
     String? rawVideoUrl = _lessonContent?['video']?['url']?.toString() ??

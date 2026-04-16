@@ -77,7 +77,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           print('Profile avatar raw: ${profile['avatar']}');
           print('Profile avatar type: ${profile['avatar']?.runtimeType}');
           if (profile['avatar'] != null) {
-            final avatarUrl = ApiEndpoints.getImageUrl(profile['avatar']?.toString());
+            final avatarUrl =
+                ApiEndpoints.getImageUrl(profile['avatar']?.toString());
             print('Profile avatar URL: $avatarUrl');
             print('Avatar URL length: ${avatarUrl.length}');
             print('Avatar URL is empty: ${avatarUrl.isEmpty}');
@@ -263,103 +264,175 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                 const SizedBox(height: 24),
 
                                 // Quick Stats Row
-                                if (_isLoading)
-                                  _buildQuickStatsSkeleton()
-                                else
-                                  _buildQuickStats(),
-
-                                const SizedBox(height: 24),
+                                _buildSectionContainer(
+                                  child: _isLoading
+                                      ? _buildQuickStatsSkeleton()
+                                      : _buildQuickStats(),
+                                ),
+                                const SizedBox(height: 20),
 
                                 // Teachers slider
-                                _buildSectionHeader(l10n.teachers, () {
-                                  context.push(
-                                    RouteNames.teachers,
-                                    extra: _teachers,
-                                  );
-                                }),
-                                const SizedBox(height: 16),
-                                if (_isLoading && _teachers.isEmpty)
-                                  _buildTeachersSliderSkeleton()
-                                else
-                                  _buildTeachersSlider(l10n),
-
-                                const SizedBox(height: 28),
+                                _buildSectionContainer(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      _buildSectionHeader(l10n.teachers, () {
+                                        context.push(
+                                          RouteNames.teachers,
+                                          extra: _teachers,
+                                        );
+                                      }),
+                                      const SizedBox(height: 16),
+                                      if (_isLoading && _teachers.isEmpty)
+                                        _buildTeachersSliderSkeleton()
+                                      else
+                                        _buildTeachersSlider(l10n),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 20),
 
                                 // Featured Courses
                                 if (_isLoading) ...[
-                                  _buildSectionHeader(
-                                      AppLocalizations.of(context)!
-                                          .featuredCourses,
-                                      () {}),
-                                  const SizedBox(height: 16),
-                                  _buildFeaturedCoursesSkeleton(),
-                                  const SizedBox(height: 28),
+                                  _buildSectionContainer(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        _buildSectionHeader(
+                                            AppLocalizations.of(context)!
+                                                .featuredCourses,
+                                            () {}),
+                                        const SizedBox(height: 16),
+                                        _buildFeaturedCoursesSkeleton(),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 20),
                                 ] else if (_featuredCourses.isNotEmpty) ...[
-                                  _buildSectionHeader(
-                                      AppLocalizations.of(context)!
-                                          .featuredCourses, () {
-                                    context.push(RouteNames.allCourses);
-                                  }),
-                                  const SizedBox(height: 16),
-                                  _buildFeaturedCourses(),
-                                  const SizedBox(height: 28),
+                                  _buildSectionContainer(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        _buildSectionHeader(
+                                            AppLocalizations.of(context)!
+                                                .featuredCourses, () {
+                                          context.push(RouteNames.allCourses);
+                                        }),
+                                        const SizedBox(height: 16),
+                                        _buildFeaturedCourses(),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 20),
                                 ],
 
                                 // Categories
                                 if (_isLoading) ...[
-                                  _buildSectionHeader(
-                                      AppLocalizations.of(context)!.categories,
-                                      () {}),
-                                  const SizedBox(height: 16),
-                                  _buildCategoriesSkeleton(),
-                                  const SizedBox(height: 28),
+                                  _buildSectionContainer(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        _buildSectionHeader(
+                                            AppLocalizations.of(context)!
+                                                .categories,
+                                            () {}),
+                                        const SizedBox(height: 16),
+                                        _buildCategoriesSkeleton(),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 20),
                                 ] else if (_categories.isNotEmpty) ...[
-                                  _buildSectionHeader(
-                                      AppLocalizations.of(context)!.categories,
-                                      () {
-                                    context.push(RouteNames.categories);
-                                  }),
-                                  const SizedBox(height: 16),
-                                  _buildCategories(),
-                                  const SizedBox(height: 28),
+                                  _buildSectionContainer(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        _buildSectionHeader(
+                                            AppLocalizations.of(context)!
+                                                .categories, () {
+                                          context.push(RouteNames.categories);
+                                        }),
+                                        const SizedBox(height: 16),
+                                        _buildCategories(),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 20),
                                 ],
 
                                 // Continue Learning
                                 if (_isLoading) ...[
-                                  _buildSectionHeader(
-                                      AppLocalizations.of(context)!
-                                          .continueLearning,
-                                      () {}),
-                                  const SizedBox(height: 16),
-                                  _buildContinueLearningSkeleton(),
-                                  const SizedBox(height: 28),
+                                  _buildSectionContainer(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        _buildSectionHeader(
+                                            AppLocalizations.of(context)!
+                                                .continueLearning,
+                                            () {}),
+                                        const SizedBox(height: 16),
+                                        _buildContinueLearningSkeleton(),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 20),
                                 ] else if (_continueLearning.isNotEmpty) ...[
-                                  _buildSectionHeader(
-                                      AppLocalizations.of(context)!
-                                          .continueLearning, () {
-                                    context.push(RouteNames.enrolled);
-                                  }),
-                                  const SizedBox(height: 16),
-                                  _buildContinueLearning(),
-                                  const SizedBox(height: 28),
+                                  _buildSectionContainer(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        _buildSectionHeader(
+                                            AppLocalizations.of(context)!
+                                                .continueLearning, () {
+                                          context.push(RouteNames.enrolled);
+                                        }),
+                                        const SizedBox(height: 16),
+                                        _buildContinueLearning(),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 20),
                                 ],
 
                                 // Popular Courses
                                 if (_isLoading) ...[
-                                  _buildSectionHeader(
-                                      AppLocalizations.of(context)!
-                                          .recommendedCourses,
-                                      () {}),
-                                  const SizedBox(height: 16),
-                                  _buildRecommendedCoursesSkeleton(),
+                                  _buildSectionContainer(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        _buildSectionHeader(
+                                            AppLocalizations.of(context)!
+                                                .recommendedCourses,
+                                            () {}),
+                                        const SizedBox(height: 16),
+                                        _buildRecommendedCoursesSkeleton(),
+                                      ],
+                                    ),
+                                  ),
                                 ] else if (_popularCourses.isNotEmpty) ...[
-                                  _buildSectionHeader(
-                                      AppLocalizations.of(context)!
-                                          .recommendedCourses, () {
-                                    context.push(RouteNames.allCourses);
-                                  }),
-                                  const SizedBox(height: 16),
-                                  _buildRecommendedCourses(),
+                                  _buildSectionContainer(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        _buildSectionHeader(
+                                            AppLocalizations.of(context)!
+                                                .recommendedCourses, () {
+                                          context.push(RouteNames.allCourses);
+                                        }),
+                                        const SizedBox(height: 16),
+                                        _buildRecommendedCourses(),
+                                      ],
+                                    ),
+                                  ),
                                 ],
 
                                 const SizedBox(height: 140),
@@ -481,8 +554,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                         _userProfile!['avatar']?.toString(),
                                       ),
                                       fit: BoxFit.cover,
-                                      loadingBuilder: (context, child, loadingProgress) {
-                                        if (loadingProgress == null) return child;
+                                      loadingBuilder:
+                                          (context, child, loadingProgress) {
+                                        if (loadingProgress == null)
+                                          return child;
                                         return Container(
                                           color: Colors.white,
                                           child: const Center(
@@ -493,16 +568,20 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                           ),
                                         );
                                       },
-                                      errorBuilder: (context, error, stackTrace) {
+                                      errorBuilder:
+                                          (context, error, stackTrace) {
                                         if (kDebugMode) {
-                                          print('❌ Error loading avatar image: $error');
-                                          print('   Avatar URL: ${ApiEndpoints.getImageUrl(_userProfile!['avatar']?.toString())}');
+                                          print(
+                                              '❌ Error loading avatar image: $error');
+                                          print(
+                                              '   Avatar URL: ${ApiEndpoints.getImageUrl(_userProfile!['avatar']?.toString())}');
                                           print('   Stack trace: $stackTrace');
                                         }
                                         return Image.asset(
                                           'assets/images/student-avatar.png',
                                           fit: BoxFit.cover,
-                                          errorBuilder: (_, __, ___) => Container(
+                                          errorBuilder: (_, __, ___) =>
+                                              Container(
                                             color: Colors.white,
                                             child: const Icon(
                                               Icons.person,
@@ -538,7 +617,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                 Text(
                                   AppLocalizations.of(context)!.welcome(
                                       _userProfile?['name']?.toString() ??
-                                          AppLocalizations.of(context)!.visitor),
+                                          AppLocalizations.of(context)!
+                                              .visitor),
                                   style: GoogleFonts.cairo(
                                     fontSize: 18,
                                     fontWeight: FontWeight.bold,
@@ -555,7 +635,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                             horizontal: 8, vertical: 2),
                                         decoration: BoxDecoration(
                                           color: Colors.white.withOpacity(0.2),
-                                          borderRadius: BorderRadius.circular(12),
+                                          borderRadius:
+                                              BorderRadius.circular(12),
                                         ),
                                         child: Row(
                                           mainAxisSize: MainAxisSize.min,
@@ -569,7 +650,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                                     .excellentStudent,
                                                 style: GoogleFonts.cairo(
                                                   fontSize: 11,
-                                                  color: Colors.white.withOpacity(0.9),
+                                                  color: Colors.white
+                                                      .withOpacity(0.9),
                                                 ),
                                                 maxLines: 1,
                                                 overflow: TextOverflow.ellipsis,
@@ -662,6 +744,23 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
+  Widget _buildSectionContainer({required Widget child}) {
+    final primaryColor = Theme.of(context).colorScheme.primary;
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 8),
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      decoration: BoxDecoration(
+        color: primaryColor.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: primaryColor.withOpacity(0.45),
+          width: 1.2,
+        ),
+      ),
+      child: child,
+    );
+  }
+
   Widget _buildSearchBar() {
     return Container(
       decoration: BoxDecoration(
@@ -740,7 +839,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     final title = heroBanner?['title']?.toString();
     final subtitle = heroBanner?['subtitle']?.toString();
     final buttonText = heroBanner?['button_text']?.toString();
-    final imageUrl = heroBanner?['image']?.toString();
+    final rawImagePath = heroBanner?['image']?.toString().trim();
+    final imageUrl = (rawImagePath != null && rawImagePath.isNotEmpty)
+        ? ApiEndpoints.getImageUrl(rawImagePath)
+        : null;
 
     // Don't show banner if no data
     if (title == null && subtitle == null) {
@@ -1264,7 +1366,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   Widget _buildSectionHeader(String title, VoidCallback onViewAll) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
+      padding: const EdgeInsets.symmetric(horizontal: 8),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [

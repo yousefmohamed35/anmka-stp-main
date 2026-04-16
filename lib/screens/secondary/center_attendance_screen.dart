@@ -8,6 +8,7 @@ import '../../core/design/app_colors.dart';
 import '../../core/design/app_radius.dart';
 import '../../services/qr_code_service.dart';
 import '../../services/profile_service.dart';
+import '../../services/teacher_dashboard_service.dart';
 import '../../l10n/app_localizations.dart';
 
 /// Center Attendance Screen - Display QR Code and Student Stats
@@ -25,6 +26,9 @@ class _CenterAttendanceScreenState extends State<CenterAttendanceScreen> {
   String? _error;
   Map<String, dynamic>? _profile;
   Map<String, dynamic>? _statistics;
+  List<Map<String, dynamic>> _attendanceRecords = [];
+  bool _loadingAttendance = true;
+  String? _attendanceLoadError;
 
   @override
   void initState() {
@@ -33,11 +37,82 @@ class _CenterAttendanceScreenState extends State<CenterAttendanceScreen> {
   }
 
   Future<void> _loadData() async {
-    // Load both QR code and profile in parallel
     await Future.wait([
       _loadQrCode(),
       _loadProfile(),
+      _loadAttendanceHistory(),
     ]);
+  }
+
+  Future<void> _loadAttendanceHistory() async {
+    if (mounted) {
+      setState(() {
+        _loadingAttendance = true;
+        _attendanceLoadError = null;
+      });
+    }
+    try {
+      final data = await TeacherDashboardService.instance.getMyAttendance(
+        limit: 50,
+      );
+      final raw = data['data'];
+      final list = raw is List ? raw : const [];
+      final records = <Map<String, dynamic>>[];
+      for (final item in list) {
+        if (item is Map) {
+          records.add(Map<String, dynamic>.from(item));
+        }
+      }
+      if (mounted) {
+        setState(() {
+          _attendanceRecords = records;
+          _loadingAttendance = false;
+        });
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('❌ Error loading attendance history: $e');
+      }
+      if (mounted) {
+        setState(() {
+          _attendanceLoadError = e.toString().replaceFirst('Exception: ', '');
+          _loadingAttendance = false;
+        });
+      }
+    }
+  }
+
+  String _attendanceDateLine(Map<String, dynamic> m) {
+    final raw = m['date'] ??
+        m['createdAt'] ??
+        m['attended_at'] ??
+        m['checked_in_at'] ??
+        '—';
+    final s = raw.toString();
+    if (s.length >= 10 && s.contains('-')) {
+      return s.substring(0, 10);
+    }
+    return s;
+  }
+
+  String? _attendanceSubtitle(Map<String, dynamic> m) {
+    final course = m['course'];
+    String? courseTitle;
+    if (course is Map) {
+      courseTitle = course['title']?.toString();
+    }
+    courseTitle ??=
+        m['course_title']?.toString() ?? m['courseTitle']?.toString();
+    final session = m['session_title']?.toString() ??
+        m['sessionTitle']?.toString() ??
+        m['session']?.toString();
+    final parts = <String>[];
+    if (courseTitle != null && courseTitle.isNotEmpty) {
+      parts.add(courseTitle);
+    }
+    if (session != null && session.isNotEmpty) parts.add(session);
+    if (parts.isEmpty) return null;
+    return parts.join(' · ');
   }
 
   Future<void> _loadQrCode() async {
@@ -113,7 +188,8 @@ class _CenterAttendanceScreenState extends State<CenterAttendanceScreen> {
         child: Column(
           children: [
             // Header with Profile and Stats
-            _buildHeader(context, l10n, enrolledCourses, certificates, totalHours),
+            _buildHeader(
+                context, l10n, enrolledCourses, certificates, totalHours),
 
             // Content
             Expanded(
@@ -136,7 +212,8 @@ class _CenterAttendanceScreenState extends State<CenterAttendanceScreen> {
                     )
                   : _error != null
                       ? _buildErrorState(context, l10n)
-                      : _buildContent(context, l10n, enrolledCourses, certificates, totalHours),
+                      : _buildContent(context, l10n, enrolledCourses,
+                          certificates, totalHours),
             ),
           ],
         ),
@@ -545,6 +622,10 @@ class _CenterAttendanceScreenState extends State<CenterAttendanceScreen> {
 
           const SizedBox(height: 24),
 
+          _buildAttendanceHistoryCard(context, l10n),
+
+          const SizedBox(height: 24),
+
           // Refresh Button
           OutlinedButton.icon(
             onPressed: _loadQrCode,
@@ -568,6 +649,187 @@ class _CenterAttendanceScreenState extends State<CenterAttendanceScreen> {
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAttendanceHistoryCard(
+    BuildContext context,
+    AppLocalizations l10n,
+  ) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.06),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.history_rounded,
+                color: AppColors.purple,
+                size: 22,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  l10n.attendanceHistory,
+                  style: GoogleFonts.cairo(
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.foreground,
+                  ),
+                ),
+              ),
+              if (!_loadingAttendance && _attendanceLoadError == null)
+                IconButton(
+                  tooltip: l10n.retry,
+                  onPressed: _loadAttendanceHistory,
+                  icon: Icon(
+                    Icons.refresh_rounded,
+                    color: AppColors.purple.withOpacity(0.85),
+                    size: 22,
+                  ),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: 36,
+                    minHeight: 36,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          if (_loadingAttendance)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (_attendanceLoadError != null)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  l10n.errorLoadingAttendanceHistory,
+                  style: GoogleFonts.cairo(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.foreground,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  _attendanceLoadError!,
+                  style: GoogleFonts.cairo(
+                    fontSize: 13,
+                    color: AppColors.mutedForeground,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextButton.icon(
+                  onPressed: _loadAttendanceHistory,
+                  icon: const Icon(Icons.refresh_rounded, size: 20),
+                  label: Text(
+                    l10n.retry,
+                    style: GoogleFonts.cairo(fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            )
+          else if (_attendanceRecords.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 20),
+              child: Center(
+                child: Text(
+                  l10n.noAttendanceRecords,
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.cairo(
+                    fontSize: 14,
+                    color: AppColors.mutedForeground,
+                  ),
+                ),
+              ),
+            )
+          else
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: _attendanceRecords.length,
+              separatorBuilder: (_, __) => const SizedBox(height: 10),
+              itemBuilder: (context, i) {
+                final m = _attendanceRecords[i];
+                final subtitle = _attendanceSubtitle(m);
+                final type =
+                    m['type']?.toString() ?? m['status']?.toString() ?? '';
+                return Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: AppColors.purple.withOpacity(0.06),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: AppColors.purple.withOpacity(0.12),
+                    ),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.check_circle_rounded,
+                        color: AppColors.purple,
+                        size: 22,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _attendanceDateLine(m),
+                              style: GoogleFonts.cairo(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.foreground,
+                              ),
+                            ),
+                            if (subtitle != null) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                subtitle,
+                                style: GoogleFonts.cairo(
+                                  fontSize: 12,
+                                  color: AppColors.mutedForeground,
+                                ),
+                              ),
+                            ],
+                            if (type.isNotEmpty) ...[
+                              const SizedBox(height: 2),
+                              Text(
+                                type,
+                                style: GoogleFonts.cairo(
+                                  fontSize: 11,
+                                  color: AppColors.mutedForeground,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
         ],
       ),
     );

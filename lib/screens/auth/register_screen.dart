@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/design/app_colors.dart';
 import '../../core/navigation/route_names.dart';
+import '../../core/auth/email_verification_exceptions.dart';
 import '../../services/auth_service.dart';
 import '../../l10n/app_localizations.dart';
 
@@ -93,13 +94,17 @@ class _RegisterScreenState extends State<RegisterScreen> {
             context.go(RouteNames.home);
           }
         }
+      } on EmailVerificationRequiredException catch (e) {
+        if (!mounted) return;
+        final encoded = Uri.encodeComponent(e.email);
+        context.go('${RouteNames.verifyEmailPending}?email=$encoded');
       } catch (e) {
         if (!mounted) return;
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              e.toString().replaceFirst('Exception: ', ''),
+              _formatRegisterError(e),
               style: GoogleFonts.cairo(),
             ),
             backgroundColor: Colors.red,
@@ -410,7 +415,36 @@ class _RegisterScreenState extends State<RegisterScreen> {
               ),
             ),
           ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+            child: _buildPoweredByFooter(),
+          ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildPoweredByFooter() {
+    return Center(
+      child: Text.rich(
+        TextSpan(
+          text: 'Powered by ',
+          style: GoogleFonts.cairo(
+            fontSize: 13,
+            color: AppColors.mutedForeground,
+            fontWeight: FontWeight.w500,
+          ),
+          children: [
+            TextSpan(
+              text: 'Anmka',
+              style: GoogleFonts.cairo(
+                fontSize: 13,
+                color: AppColors.primary,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -423,6 +457,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
           fontWeight: FontWeight.w600,
           color: AppColors.foreground),
     );
+  }
+
+  String _formatRegisterError(Object error) {
+    final raw = error.toString().replaceFirst('Exception: ', '').trim();
+    if (raw.isEmpty) {
+      return 'حدث خطأ أثناء إنشاء الحساب';
+    }
+    return raw;
   }
 
   Widget _buildStudentTypeSelector(BuildContext context) {

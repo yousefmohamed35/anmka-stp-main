@@ -7,6 +7,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 import '../core/api/api_client.dart';
 import '../core/api/api_endpoints.dart';
+import '../core/auth/email_verification_exceptions.dart';
 import '../core/notification_service/notification_service.dart';
 import '../models/auth_response.dart';
 import 'token_storage_service.dart';
@@ -16,6 +17,31 @@ class AuthService {
   AuthService._();
 
   static final AuthService instance = AuthService._();
+
+  bool _impliesEmailNotVerifiedFromMessage(String message) {
+    final m = message.toLowerCase();
+    if (m.contains('email_not_verified') || m.contains('email not verified')) {
+      return true;
+    }
+    return m.contains('verif') &&
+        m.contains('email') &&
+        (m.contains('not') || m.contains('لم') || m.contains('غير'));
+  }
+
+  /// Backend may return 403 or 401 with [ApiException.errorCode] `EMAIL_NOT_VERIFIED`.
+  void _maybeRethrowEmailNotVerified(ApiException e) {
+    final code = e.errorCode?.toUpperCase();
+    if (code == 'EMAIL_NOT_VERIFIED') {
+      throw EmailNotVerifiedException(
+        e.message.trim().isNotEmpty ? e.message : '',
+      );
+    }
+    if (e.statusCode == 403 && _impliesEmailNotVerifiedFromMessage(e.message)) {
+      throw EmailNotVerifiedException(
+        e.message.trim().isNotEmpty ? e.message : '',
+      );
+    }
+  }
 
   /// Check if input is email or phone
   bool _isEmail(String input) {
@@ -81,6 +107,14 @@ class AuthService {
 
         final authResponse = AuthResponse.fromJson(response);
 
+        if (!authResponse.user.emailVerified) {
+          throw EmailNotVerifiedException(
+            (response['message'] as String?)?.trim().isNotEmpty == true
+                ? (response['message'] as String).trim()
+                : '',
+          );
+        }
+
         print('🔐 Login successful - Parsing tokens...');
         print(
             '  Token from model: ${authResponse.token.isNotEmpty ? "${authResponse.token.substring(0, authResponse.token.length > 20 ? 20 : authResponse.token.length)}..." : "EMPTY"}');
@@ -128,7 +162,9 @@ class AuthService {
         throw Exception(response['message'] ?? 'Login failed');
       }
     } catch (e) {
+      if (e is EmailNotVerifiedException) rethrow;
       if (e is ApiException) {
+        _maybeRethrowEmailNotVerified(e);
         // Try to parse error message from response body
         try {
           final errorBody = e.message;
@@ -238,6 +274,15 @@ class AuthService {
 
         final authResponse = AuthResponse.fromJson(response);
 
+        if (!authResponse.user.emailVerified) {
+          throw EmailVerificationRequiredException(
+            email: authResponse.user.email.isNotEmpty
+                ? authResponse.user.email
+                : email,
+            serverMessage: response['message']?.toString(),
+          );
+        }
+
         print('🔐 Registration successful - Parsing tokens...');
         print(
             '  Token from model: ${authResponse.token.isNotEmpty ? "${authResponse.token.substring(0, authResponse.token.length > 20 ? 20 : authResponse.token.length)}..." : "EMPTY"}');
@@ -287,23 +332,124 @@ class AuthService {
         throw Exception(response['message'] ?? 'Registration failed');
       }
     } catch (e) {
+      if (e is EmailVerificationRequiredException) rethrow;
       if (e is ApiException) {
-        // Try to parse error message from response body
-        try {
-          final errorBody = e.message;
-          final match = RegExp(r'\{.*\}').firstMatch(errorBody);
-          if (match != null) {
-            final errorJson = jsonDecode(match.group(0)!);
-            final message = errorJson['message'] ??
-                errorJson['error'] ??
-                'Registration failed';
-            throw Exception(message);
-          }
-        } catch (_) {}
-        throw Exception('فشل إنشاء الحساب. يرجى المحاولة مرة أخرى');
+        throw Exception(_formatApiErrorMessage(e.message,
+            fallbackMessage: 'فشل إنشاء الحساب. يرجى المحاولة مرة أخرى'));
       }
       rethrow;
     }
+  }
+
+  /// Resend the email verification link (requires backend endpoint).
+  Future<void> resendVerificationEmail({required String email}) async {
+    try {
+      final response = await ApiClient.instance.post(
+        ApiEndpoints.resendEmailVerification,
+        body: {'email': email.trim()},
+        requireAuth: false,
+      );
+
+      if (response['success'] != true) {
+        throw Exception(
+          response['message']?.toString() ??
+              'Failed to resend verification email',
+        );
+      }
+    } catch (e) {
+      if (e is ApiException) {
+        throw Exception(_formatApiErrorMessage(
+          e.message,
+          fallbackMessage:
+              'تعذر إعادة إرسال رسالة التحقق. يرجى المحاولة لاحقاً',
+        ));
+      }
+      rethrow;
+    }
+  }
+
+  String _formatApiErrorMessage(
+    String rawMessage, {
+    required String fallbackMessage,
+  }) {
+    if (rawMessage.trim().isEmpty) return fallbackMessage;
+
+    String message = rawMessage;
+    final details = <String>[];
+
+    try {
+      Map<String, dynamic>? errorJson;
+      if (rawMessage.trimLeft().startsWith('{')) {
+        errorJson = jsonDecode(rawMessage) as Map<String, dynamic>;
+      } else {
+        final match = RegExp(r'\{.*\}').firstMatch(rawMessage);
+        if (match != null) {
+          errorJson = jsonDecode(match.group(0)!) as Map<String, dynamic>;
+        }
+      }
+
+      if (errorJson != null) {
+        message = (errorJson['message'] ?? errorJson['error'] ?? message)
+            .toString()
+            .trim();
+
+        final errors = errorJson['errors'];
+        if (errors is Map) {
+          for (final value in errors.values) {
+            if (value is List) {
+              for (final item in value) {
+                final text = item.toString().trim();
+                if (text.isNotEmpty) details.add(text);
+              }
+            } else if (value != null) {
+              final text = value.toString().trim();
+              if (text.isNotEmpty) details.add(text);
+            }
+          }
+        } else if (errors is List) {
+          for (final item in errors) {
+            final text = item.toString().trim();
+            if (text.isNotEmpty) details.add(text);
+          }
+        }
+      }
+    } catch (_) {
+      // Keep original message if parsing fails.
+    }
+
+    final cleanMessage = _cleanErrorPrefixes(
+      message.isNotEmpty ? message : fallbackMessage,
+      fallbackMessage: fallbackMessage,
+    );
+    if (details.isEmpty) return cleanMessage;
+
+    return '$cleanMessage\n${details.join('\n')}';
+  }
+
+  String _cleanErrorPrefixes(
+    String message, {
+    required String fallbackMessage,
+  }) {
+    var result = message.trim();
+
+    while (true) {
+      final lower = result.toLowerCase();
+      if (lower.startsWith('network error:')) {
+        result = result.substring('network error:'.length).trim();
+        continue;
+      }
+      if (lower.startsWith('network error -')) {
+        result = result.substring('network error -'.length).trim();
+        continue;
+      }
+      if (lower.startsWith('exception:')) {
+        result = result.substring('exception:'.length).trim();
+        continue;
+      }
+      break;
+    }
+
+    return result.isEmpty ? fallbackMessage : result;
   }
 
   /// Refresh access token
@@ -505,6 +651,14 @@ class AuthService {
       if (response['success'] == true) {
         final authResponse = AuthResponse.fromJson(response);
 
+        if (!authResponse.user.emailVerified) {
+          throw EmailNotVerifiedException(
+            (response['message'] as String?)?.trim().isNotEmpty == true
+                ? (response['message'] as String).trim()
+                : '',
+          );
+        }
+
         if (kDebugMode) {
           print('🔐 Google Social Login successful - Saving tokens...');
           print('  Token length: ${authResponse.token.length}');
@@ -566,7 +720,16 @@ class AuthService {
             '- ملف google-services.json يحتوي على OAuth Client IDs');
       }
 
+      if (e is EmailNotVerifiedException) rethrow;
       if (e is ApiException) {
+        final code = e.errorCode?.toUpperCase();
+        if (e.statusCode == 403 &&
+            (code == 'EMAIL_NOT_VERIFIED' ||
+                _impliesEmailNotVerifiedFromMessage(e.message))) {
+          throw EmailNotVerifiedException(
+            e.message.trim().isNotEmpty ? e.message : '',
+          );
+        }
         // Try to parse error message from response body
         try {
           final errorBody = e.message;
@@ -665,6 +828,14 @@ class AuthService {
       if (response['success'] == true) {
         final authResponse = AuthResponse.fromJson(response);
 
+        if (!authResponse.user.emailVerified) {
+          throw EmailNotVerifiedException(
+            (response['message'] as String?)?.trim().isNotEmpty == true
+                ? (response['message'] as String).trim()
+                : '',
+          );
+        }
+
         if (kDebugMode) {
           print('🔐 Apple Social Login successful - Saving tokens...');
           print('  Token length: ${authResponse.token.length}');
@@ -698,7 +869,9 @@ class AuthService {
         throw Exception(response['message'] ?? 'فشل تسجيل الدخول عبر Apple');
       }
     } catch (e) {
+      if (e is EmailNotVerifiedException) rethrow;
       if (e is ApiException) {
+        _maybeRethrowEmailNotVerified(e);
         // Try to parse error message from response body
         try {
           final errorBody = e.message;

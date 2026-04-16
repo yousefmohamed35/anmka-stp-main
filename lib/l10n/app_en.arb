@@ -176,7 +176,7 @@
   "@studentType": {
     "description": "Student type label"
   },
-  "inPersonStudent": "In-class student",
+  "inPersonStudent": "Offline student",
   "@inPersonStudent": {
     "description": "On-campus student option"
   },
@@ -770,6 +770,35 @@
   "sendToAnotherEmail": "Send to another email",
   "@sendToAnotherEmail": {
     "description": "Send to another email"
+  },
+  "verifyEmailTitle": "Verify your email",
+  "@verifyEmailTitle": {
+    "description": "Email verification pending screen title"
+  },
+  "verifyEmailHeadline": "Check your inbox",
+  "@verifyEmailHeadline": {
+    "description": "Email verification headline"
+  },
+  "verifyEmailBody": "We sent a verification link to {email}. Open the link in your email, then return here and sign in.",
+  "@verifyEmailBody": {
+    "description": "Instructions after registration",
+    "placeholders": {
+      "email": {
+        "type": "String"
+      }
+    }
+  },
+  "resendVerificationEmail": "Resend verification email",
+  "@resendVerificationEmail": {
+    "description": "Button to resend verification"
+  },
+  "resendVerificationSuccess": "Verification email sent. Please check your inbox.",
+  "@resendVerificationSuccess": {
+    "description": "Snackbar after resend succeeds"
+  },
+  "emailNotVerifiedLogin": "Please verify your email before signing in. Check your inbox for the link.",
+  "@emailNotVerifiedLogin": {
+    "description": "Shown when login is blocked until email is verified"
   },
   
   "exams": "Exam",
@@ -1778,6 +1807,39 @@
   "@downloadCoursesToWatchOffline": {
     "description": "Download courses to watch offline"
   },
+  "clearAllOfflineVideos": "Clear all offline videos",
+  "@clearAllOfflineVideos": {
+    "description": "Settings action to remove all downloaded lesson videos from this device"
+  },
+  "clearAllOfflineVideosConfirmTitle": "Delete all offline videos?",
+  "@clearAllOfflineVideosConfirmTitle": {
+    "description": "Confirmation dialog title for clearing offline videos"
+  },
+  "clearAllOfflineVideosConfirmBody": "This removes every lesson video saved on this device for offline viewing. It does not delete your account or course progress. You can download videos again when allowed and online.",
+  "@clearAllOfflineVideosConfirmBody": {
+    "description": "Confirmation dialog body for clearing offline videos"
+  },
+  "clearAllOfflineVideosSuccess": "Removed {count} offline video(s).",
+  "@clearAllOfflineVideosSuccess": {
+    "description": "Snackbar after clearing offline videos",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "clearAllOfflineVideosFailed": "Could not clear offline videos.",
+  "@clearAllOfflineVideosFailed": {
+    "description": "Error when clearing offline videos fails"
+  },
+  "clearAllOfflineVideosNothing": "No offline videos to remove.",
+  "@clearAllOfflineVideosNothing": {
+    "description": "Shown when there are no downloaded videos"
+  },
+  "clearAllOfflineVideosProgress": "Clearing offline videos…",
+  "@clearAllOfflineVideosProgress": {
+    "description": "Loading text while bulk-deleting offline videos"
+  },
   "liveSessionsCount": "{count} {count, plural, =1 {session} other {sessions}} {status}",
   "@liveSessionsCount": {
     "description": "Number of sessions",
@@ -1895,6 +1957,18 @@
   "refreshQrCode": "Refresh QR Code",
   "@refreshQrCode": {
     "description": "Refresh QR Code"
+  },
+  "attendanceHistory": "Attendance history",
+  "@attendanceHistory": {
+    "description": "Section title for past center attendance records"
+  },
+  "noAttendanceRecords": "No attendance records yet",
+  "@noAttendanceRecords": {
+    "description": "Empty state when student has no attendance history"
+  },
+  "errorLoadingAttendanceHistory": "Could not load attendance history",
+  "@errorLoadingAttendanceHistory": {
+    "description": "Error when my-attendance API fails"
   },
   "retry": "Retry",
   "@retry": {

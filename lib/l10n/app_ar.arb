@@ -176,7 +176,7 @@
   "@studentType": {
     "description": "عنوان نوع الطالب"
   },
-  "inPersonStudent": "طالب محاضري",
+  "inPersonStudent": "طالب أوفلاين",
   "@inPersonStudent": {
     "description": "خيار الطالب المحاضري"
   },
@@ -770,6 +770,35 @@
   "sendToAnotherEmail": "إرسال إلى بريد إلكتروني آخر",
   "@sendToAnotherEmail": {
     "description": "إرسال إلى بريد إلكتروني آخر"
+  },
+  "verifyEmailTitle": "تأكيد البريد الإلكتروني",
+  "@verifyEmailTitle": {
+    "description": "عنوان شاشة انتظار التحقق من البريد"
+  },
+  "verifyEmailHeadline": "تحقق من بريدك",
+  "@verifyEmailHeadline": {
+    "description": "عنوان فرعي للتحقق من البريد"
+  },
+  "verifyEmailBody": "أرسلنا رابط التحقق إلى {email}. افتح الرابط من بريدك، ثم عد هنا وسجّل الدخول.",
+  "@verifyEmailBody": {
+    "description": "تعليمات بعد التسجيل",
+    "placeholders": {
+      "email": {
+        "type": "String"
+      }
+    }
+  },
+  "resendVerificationEmail": "إعادة إرسال رسالة التحقق",
+  "@resendVerificationEmail": {
+    "description": "زر إعادة إرسال التحقق"
+  },
+  "resendVerificationSuccess": "تم إرسال رسالة التحقق. يرجى مراجعة بريدك.",
+  "@resendVerificationSuccess": {
+    "description": "رسالة نجاح إعادة الإرسال"
+  },
+  "emailNotVerifiedLogin": "يرجى تأكيد بريدك الإلكتروني قبل تسجيل الدخول. تحقق من صندوق الوارد للرابط.",
+  "@emailNotVerifiedLogin": {
+    "description": "عند منع تسجيل الدخول حتى يتم التحقق من البريد"
   },
   
   "exams": "الاختبار",
@@ -1778,6 +1807,39 @@
   "@downloadCoursesToWatchOffline": {
     "description": "حمّل الدورات لمشاهدتها بدون إنترنت"
   },
+  "clearAllOfflineVideos": "مسح كل الفيديوهات المحمّلة",
+  "@clearAllOfflineVideos": {
+    "description": "إعدادات: حذف كل فيديوهات الدروس المحمّلة من الجهاز"
+  },
+  "clearAllOfflineVideosConfirmTitle": "حذف كل الفيديوهات المحمّلة؟",
+  "@clearAllOfflineVideosConfirmTitle": {
+    "description": "عنوان تأكيد مسح الفيديوهات المحمّلة"
+  },
+  "clearAllOfflineVideosConfirmBody": "سيتم حذف كل فيديوهات الدروس المحفوظة على هذا الجهاز للمشاهدة بدون إنترنت. لا يُحذف حسابك أو تقدمك في الدورات. يمكنك إعادة التحميل لاحقاً إذا سُمح بذلك وكنت متصلاً بالإنترنت.",
+  "@clearAllOfflineVideosConfirmBody": {
+    "description": "نص تأكيد مسح الفيديوهات المحمّلة"
+  },
+  "clearAllOfflineVideosSuccess": "تمت إزالة {count} فيديو محمّل.",
+  "@clearAllOfflineVideosSuccess": {
+    "description": "رسالة نجاح بعد مسح الفيديوهات",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "clearAllOfflineVideosFailed": "تعذّر مسح الفيديوهات المحمّلة.",
+  "@clearAllOfflineVideosFailed": {
+    "description": "خطأ عند فشل مسح الفيديوهات"
+  },
+  "clearAllOfflineVideosNothing": "لا توجد فيديوهات محمّلة للحذف.",
+  "@clearAllOfflineVideosNothing": {
+    "description": "عند عدم وجود فيديوهات محمّلة"
+  },
+  "clearAllOfflineVideosProgress": "جاري مسح الفيديوهات المحمّلة…",
+  "@clearAllOfflineVideosProgress": {
+    "description": "نص أثناء مسح الفيديوهات المحمّلة"
+  },
   "liveSessionsCount": "{count} جلسات {status}",
   "@liveSessionsCount": {
     "description": "عدد الجلسات",
@@ -1895,6 +1957,18 @@
   "refreshQrCode": "تحديث الكود",
   "@refreshQrCode": {
     "description": "تحديث الكود"
+  },
+  "attendanceHistory": "سجل الحضور",
+  "@attendanceHistory": {
+    "description": "عنوان قسم سجلات الحضور"
+  },
+  "noAttendanceRecords": "لا توجد سجلات حضور بعد",
+  "@noAttendanceRecords": {
+    "description": "لا يوجد حضور مسجل"
+  },
+  "errorLoadingAttendanceHistory": "تعذر تحميل سجل الحضور",
+  "@errorLoadingAttendanceHistory": {
+    "description": "خطأ عند فشل تحميل الحضور"
   },
   "retry": "إعادة المحاولة",
   "@retry": {

@@ -5,7 +5,9 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/design/app_colors.dart';
 import '../../core/navigation/route_names.dart';
+import '../../core/auth/email_verification_exceptions.dart';
 import '../../services/auth_service.dart';
+import '../../services/email_storage_service.dart';
 import '../../l10n/app_localizations.dart';
 
 /// Login Screen - Clean Design like Account Page
@@ -20,10 +22,52 @@ class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailOrPhoneController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _emailStorageService = EmailStorageService();
+  final _emailFocusNode = FocusNode();
   bool _showPassword = false;
   bool _isLoading = false;
+  List<String> _savedEmails = [];
   // bool _googleLoading = false;
   // bool _appleLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _emailFocusNode.addListener(_onEmailFocusChanged);
+    _loadSavedEmails();
+  }
+
+  void _onEmailFocusChanged() {
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  Future<void> _loadSavedEmails() async {
+    final emails = await _emailStorageService.getSavedEmails();
+    if (!mounted) return;
+    setState(() {
+      _savedEmails = emails;
+    });
+  }
+
+  List<String> get _filteredEmails {
+    final query = _emailOrPhoneController.text.trim().toLowerCase();
+    if (query.isEmpty) return _savedEmails;
+    return _savedEmails
+        .where((email) => email.toLowerCase().contains(query))
+        .toList();
+  }
+
+  void _selectSavedEmail(String email) {
+    _emailOrPhoneController.text = email;
+    _emailOrPhoneController.selection = TextSelection.fromPosition(
+      TextPosition(offset: email.length),
+    );
+    FocusScope.of(context).requestFocus(_passwordFocusNode);
+    setState(() {});
+  }
+
+  final _passwordFocusNode = FocusNode();
 
   Future<void> _handleLogin() async {
     if (_formKey.currentState!.validate()) {
@@ -36,6 +80,9 @@ class _LoginScreenState extends State<LoginScreen> {
         );
 
         if (!mounted) return;
+
+        await _emailStorageService.saveEmail(_emailOrPhoneController.text);
+        await _loadSavedEmails();
 
         // Save launch flag
         final prefs = await SharedPreferences.getInstance();
@@ -50,6 +97,19 @@ class _LoginScreenState extends State<LoginScreen> {
             context.go(RouteNames.home);
           }
         }
+      } on EmailNotVerifiedException catch (e) {
+        if (!mounted) return;
+        final l10n = AppLocalizations.of(context)!;
+        final msg = e.message.trim().isNotEmpty
+            ? e.message
+            : l10n.emailNotVerifiedLogin;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(msg, style: GoogleFonts.cairo()),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
+          ),
+        );
       } catch (e) {
         if (!mounted) return;
 
@@ -160,6 +220,9 @@ class _LoginScreenState extends State<LoginScreen> {
   void dispose() {
     _emailOrPhoneController.dispose();
     _passwordController.dispose();
+    _emailFocusNode.removeListener(_onEmailFocusChanged);
+    _emailFocusNode.dispose();
+    _passwordFocusNode.dispose();
     super.dispose();
   }
 
@@ -283,170 +346,209 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.fromLTRB(24, 40, 24, 24),
-                  child: Form(
-                    key: _formKey,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Email or Phone Field
-                        _buildLabel(AppLocalizations.of(context)!.emailOrPhone),
-                        const SizedBox(height: 8),
-                        _buildTextField(
-                          controller: _emailOrPhoneController,
-                          hint: AppLocalizations.of(context)!.enterEmailOrPhone,
-                          icon: Icons.alternate_email_rounded,
-                          keyboardType: TextInputType.text,
-                        ),
-                        const SizedBox(height: 20),
-
-                        // Password Field
-                        _buildLabel(AppLocalizations.of(context)!.password),
-                        const SizedBox(height: 8),
-                        _buildTextField(
-                          controller: _passwordController,
-                          hint: AppLocalizations.of(context)!.enterPassword,
-                          icon: Icons.lock_outline_rounded,
-                          isPassword: true,
-                        ),
-                        const SizedBox(height: 12),
-
-                        // Forgot Password
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: TextButton(
-                            onPressed: () =>
-                                context.push(RouteNames.forgotPassword),
-                            style: TextButton.styleFrom(
-                              padding: EdgeInsets.zero,
-                              minimumSize: Size.zero,
-                            ),
-                            child: Text(
-                              AppLocalizations.of(context)!.forgotPassword,
-                              style: GoogleFonts.cairo(
-                                fontSize: 13,
-                                color: AppColors.purple,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
+                  child: AutofillGroup(
+                    child: Form(
+                      key: _formKey,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Email or Phone Field
+                          _buildLabel(
+                              AppLocalizations.of(context)!.emailOrPhone),
+                          const SizedBox(height: 8),
+                          _buildTextField(
+                            controller: _emailOrPhoneController,
+                            hint:
+                                AppLocalizations.of(context)!.enterEmailOrPhone,
+                            icon: Icons.alternate_email_rounded,
+                            keyboardType: TextInputType.text,
+                            focusNode: _emailFocusNode,
+                            autofillHints: const [AutofillHints.email],
+                            onChanged: (_) => setState(() {}),
                           ),
-                        ),
-                        const SizedBox(height: 24),
+                          _buildEmailSuggestions(),
+                          const SizedBox(height: 20),
 
-                        // Login Button
-                        SizedBox(
-                          width: double.infinity,
-                          height: 54,
-                          child: ElevatedButton(
-                            onPressed: _isLoading ? null : _handleLogin,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.purple,
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              elevation: 0,
-                            ),
-                            child: _isLoading
-                                ? const SizedBox(
-                                    width: 24,
-                                    height: 24,
-                                    child: CircularProgressIndicator(
-                                      color: Colors.white,
-                                      strokeWidth: 2.5,
-                                    ),
-                                  )
-                                : Text(
-                                    AppLocalizations.of(context)!.login,
-                                    style: GoogleFonts.cairo(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
+                          // Password Field
+                          _buildLabel(AppLocalizations.of(context)!.password),
+                          const SizedBox(height: 8),
+                          _buildTextField(
+                            controller: _passwordController,
+                            hint: AppLocalizations.of(context)!.enterPassword,
+                            icon: Icons.lock_outline_rounded,
+                            isPassword: true,
+                            focusNode: _passwordFocusNode,
+                            autofillHints: const [AutofillHints.password],
                           ),
-                        ),
-                        const SizedBox(height: 24),
+                          const SizedBox(height: 12),
 
-                        // Apple and Google auth widget - commented out
-                        // // Divider
-                        // Row(
-                        //   children: [
-                        //     Expanded(child: Divider(color: Colors.grey[300])),
-                        //     Padding(
-                        //       padding:
-                        //           const EdgeInsets.symmetric(horizontal: 16),
-                        //       child: Text(
-                        //         AppLocalizations.of(context)!.or,
-                        //         style: GoogleFonts.cairo(
-                        //             color: AppColors.mutedForeground),
-                        //       ),
-                        //     ),
-                        //     Expanded(child: Divider(color: Colors.grey[300])),
-                        //   ],
-                        // ),
-                        // const SizedBox(height: 24),
-
-                        // // Social Buttons
-                        // Row(
-                        //   children: [
-                        //     Expanded(
-                        //         child: _buildSocialButton(
-                        //       icon: Icons.g_mobiledata_rounded,
-                        //       label: AppLocalizations.of(context)!.google,
-                        //       onPressed: (_isLoading || _appleLoading)
-                        //           ? null
-                        //           : _handleGoogleLogin,
-                        //       isLoading: _googleLoading,
-                        //     )),
-                        //     const SizedBox(width: 12),
-                        //     Expanded(
-                        //         child: _buildSocialButton(
-                        //       icon: Icons.apple_rounded,
-                        //       label: AppLocalizations.of(context)!.apple,
-                        //       onPressed: (_isLoading || _googleLoading)
-                        //           ? null
-                        //           : _handleAppleLogin,
-                        //       isLoading: _appleLoading,
-                        //     )),
-                        //   ],
-                        // ),
-
-                        const SizedBox(height: 32),
-
-                        // Register Link
-                        Center(
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                AppLocalizations.of(context)!.noAccount,
+                          // Forgot Password
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: TextButton(
+                              onPressed: () =>
+                                  context.push(RouteNames.forgotPassword),
+                              style: TextButton.styleFrom(
+                                padding: EdgeInsets.zero,
+                                minimumSize: Size.zero,
+                              ),
+                              child: Text(
+                                AppLocalizations.of(context)!.forgotPassword,
                                 style: GoogleFonts.cairo(
-                                  fontSize: 14,
-                                  color: AppColors.mutedForeground,
+                                  fontSize: 13,
+                                  color: AppColors.purple,
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
-                              TextButton(
-                                onPressed: () =>
-                                    context.go(RouteNames.register),
-                                child: Text(
-                                  AppLocalizations.of(context)!.registerNow,
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+
+                          // Login Button
+                          SizedBox(
+                            width: double.infinity,
+                            height: 54,
+                            child: ElevatedButton(
+                              onPressed: _isLoading ? null : _handleLogin,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.purple,
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                elevation: 0,
+                              ),
+                              child: _isLoading
+                                  ? const SizedBox(
+                                      width: 24,
+                                      height: 24,
+                                      child: CircularProgressIndicator(
+                                        color: Colors.white,
+                                        strokeWidth: 2.5,
+                                      ),
+                                    )
+                                  : Text(
+                                      AppLocalizations.of(context)!.login,
+                                      style: GoogleFonts.cairo(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+
+                          // Apple and Google auth widget - commented out
+                          // // Divider
+                          // Row(
+                          //   children: [
+                          //     Expanded(child: Divider(color: Colors.grey[300])),
+                          //     Padding(
+                          //       padding:
+                          //           const EdgeInsets.symmetric(horizontal: 16),
+                          //       child: Text(
+                          //         AppLocalizations.of(context)!.or,
+                          //         style: GoogleFonts.cairo(
+                          //             color: AppColors.mutedForeground),
+                          //       ),
+                          //     ),
+                          //     Expanded(child: Divider(color: Colors.grey[300])),
+                          //   ],
+                          // ),
+                          // const SizedBox(height: 24),
+
+                          // // Social Buttons
+                          // Row(
+                          //   children: [
+                          //     Expanded(
+                          //         child: _buildSocialButton(
+                          //       icon: Icons.g_mobiledata_rounded,
+                          //       label: AppLocalizations.of(context)!.google,
+                          //       onPressed: (_isLoading || _appleLoading)
+                          //           ? null
+                          //           : _handleGoogleLogin,
+                          //       isLoading: _googleLoading,
+                          //     )),
+                          //     const SizedBox(width: 12),
+                          //     Expanded(
+                          //         child: _buildSocialButton(
+                          //       icon: Icons.apple_rounded,
+                          //       label: AppLocalizations.of(context)!.apple,
+                          //       onPressed: (_isLoading || _googleLoading)
+                          //           ? null
+                          //           : _handleAppleLogin,
+                          //       isLoading: _appleLoading,
+                          //     )),
+                          //   ],
+                          // ),
+
+                          const SizedBox(height: 32),
+
+                          // Register Link
+                          Center(
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  AppLocalizations.of(context)!.noAccount,
                                   style: GoogleFonts.cairo(
                                     fontSize: 14,
-                                    fontWeight: FontWeight.bold,
-                                    color: AppColors.purple,
+                                    color: AppColors.mutedForeground,
                                   ),
                                 ),
-                              ),
-                            ],
+                                TextButton(
+                                  onPressed: () =>
+                                      context.go(RouteNames.register),
+                                  child: Text(
+                                    AppLocalizations.of(context)!.registerNow,
+                                    style: GoogleFonts.cairo(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.purple,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
           ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+            child: _buildPoweredByFooter(),
+          ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildPoweredByFooter() {
+    return Center(
+      child: Text.rich(
+        TextSpan(
+          text: 'Powered by ',
+          style: GoogleFonts.cairo(
+            fontSize: 13,
+            color: AppColors.mutedForeground,
+            fontWeight: FontWeight.w500,
+          ),
+          children: [
+            TextSpan(
+              text: 'Anmka',
+              style: GoogleFonts.cairo(
+                fontSize: 13,
+                color: AppColors.primary,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -468,6 +570,9 @@ class _LoginScreenState extends State<LoginScreen> {
     required IconData icon,
     bool isPassword = false,
     TextInputType? keyboardType,
+    FocusNode? focusNode,
+    List<String>? autofillHints,
+    ValueChanged<String>? onChanged,
   }) {
     return Container(
       decoration: BoxDecoration(
@@ -483,8 +588,11 @@ class _LoginScreenState extends State<LoginScreen> {
       ),
       child: TextFormField(
         controller: controller,
+        focusNode: focusNode,
         obscureText: isPassword && !_showPassword,
         keyboardType: keyboardType,
+        autofillHints: autofillHints,
+        onChanged: onChanged,
         style: GoogleFonts.cairo(fontSize: 15),
         decoration: InputDecoration(
           hintText: hint,
@@ -518,6 +626,44 @@ class _LoginScreenState extends State<LoginScreen> {
           // Accept any input (email or phone) - validation will be done by backend
           return null;
         },
+      ),
+    );
+  }
+
+  Widget _buildEmailSuggestions() {
+    final suggestions = _filteredEmails;
+    if (!_emailFocusNode.hasFocus ||
+        _savedEmails.isEmpty ||
+        suggestions.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.03),
+              blurRadius: 8,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Column(
+          children: suggestions.take(4).map((email) {
+            return ListTile(
+              dense: true,
+              title: Text(
+                email,
+                style: GoogleFonts.cairo(fontSize: 14),
+              ),
+              onTap: () => _selectSavedEmail(email),
+            );
+          }).toList(),
+        ),
       ),
     );
   }

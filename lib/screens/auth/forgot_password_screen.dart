@@ -181,7 +181,36 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
               ),
             ),
           ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+            child: _buildPoweredByFooter(),
+          ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildPoweredByFooter() {
+    return Center(
+      child: Text.rich(
+        TextSpan(
+          text: 'Powered by ',
+          style: GoogleFonts.cairo(
+            fontSize: 13,
+            color: AppColors.mutedForeground,
+            fontWeight: FontWeight.w500,
+          ),
+          children: [
+            TextSpan(
+              text: 'Anmka',
+              style: GoogleFonts.cairo(
+                fontSize: 13,
+                color: AppColors.primary,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

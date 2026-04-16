@@ -56,6 +56,10 @@ class ApiEndpoints {
   static String get changePassword => '$baseUrl/auth/change-password';
   static String get socialLogin => '$baseUrl/auth/social-login';
 
+  /// Resend email verification link (backend contract — see docs/BACKEND_EMAIL_VERIFICATION.md).
+  static String get resendEmailVerification =>
+      '$baseUrl/auth/email/resend-verification';
+
   // Home Page
   static String get home => '$baseUrl/home';
 

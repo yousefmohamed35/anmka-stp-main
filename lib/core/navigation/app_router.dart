@@ -5,6 +5,7 @@ import '../../screens/startup/onboarding_screen.dart';
 import '../../screens/auth/login_screen.dart';
 import '../../screens/auth/register_screen.dart';
 import '../../screens/auth/forgot_password_screen.dart';
+import '../../screens/auth/verify_email_pending_screen.dart';
 import '../../screens/student/home_screen.dart';
 import '../../screens/student/courses_screen.dart';
 import '../../screens/student/progress_screen.dart';
@@ -20,6 +21,7 @@ import '../../screens/instructor/instructor_scan_qr_screen.dart';
 import '../../screens/secondary/categories_screen.dart';
 import '../../screens/secondary/course_details_screen.dart';
 import '../../screens/secondary/lesson_viewer_screen.dart';
+import '../../screens/secondary/youtube_video_test_screen.dart';
 import '../../screens/secondary/exams_screen.dart';
 import '../../screens/secondary/my_exams_screen.dart';
 import '../../screens/secondary/notifications_screen.dart';
@@ -90,6 +92,16 @@ class AppRouter {
           key: state.pageKey,
           child: const ForgotPasswordScreen(),
         ),
+      ),
+      GoRoute(
+        path: RouteNames.verifyEmailPending,
+        pageBuilder: (context, state) {
+          final email = state.uri.queryParameters['email'] ?? '';
+          return _buildPageWithTransition(
+            key: state.pageKey,
+            child: VerifyEmailPendingScreen(email: email),
+          );
+        },
       ),
 
       // Instructor flow
@@ -234,6 +246,13 @@ class AppRouter {
           child: TeacherDetailsScreen(
             teacher: state.extra as Map<String, dynamic>?,
           ),
+        ),
+      ),
+      GoRoute(
+        path: RouteNames.youtubeVideoTest,
+        pageBuilder: (context, state) => _buildPageWithTransition(
+          key: state.pageKey,
+          child: const YoutubeVideoTestScreen(),
         ),
       ),
       GoRoute(
