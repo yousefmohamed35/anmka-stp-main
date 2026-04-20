@@ -6,6 +6,7 @@ import 'package:screen_protector/screen_protector.dart';
 import 'core/design/app_theme.dart';
 import 'core/navigation/app_router.dart';
 import 'core/config/app_config_provider.dart';
+import 'screens/startup/mandatory_update_screen.dart';
 import 'core/config/theme_provider.dart';
 import 'l10n/app_localizations.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -63,6 +64,17 @@ class EducationalApp extends StatelessWidget {
             return MaterialApp.router(
               title: configProvider.config?.appName ?? 'الباشميكانيكا',
               debugShowCheckedModeBanner: false,
+              builder: (context, child) {
+                if (configProvider.isMandatoryUpdateRequired &&
+                    configProvider.config != null &&
+                    configProvider.installedAppVersion != null) {
+                  return MandatoryUpdateScreen(
+                    config: configProvider.config!,
+                    installedVersion: configProvider.installedAppVersion!,
+                  );
+                }
+                return child ?? const SizedBox.shrink();
+              },
 
               // RTL & Localization
               locale: themeProvider.locale,

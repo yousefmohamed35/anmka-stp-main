@@ -2011,6 +2011,26 @@
         "type": "int"
       }
     }
+  },
+  "mandatoryUpdateTitle": "يلزم التحديث",
+  "@mandatoryUpdateTitle": {
+    "description": "عنوان عند حظر الإصدار حتى التحديث"
+  },
+  "mandatoryUpdateBody": "الإصدار الحالي ({current}) لم يعد مدعومًا. يرجى تثبيت الإصدار {required} أو أحدث من المتجر.",
+  "@mandatoryUpdateBody": {
+    "description": "شرح إصدار التطبيق المحظور والإصدار المطلوب",
+    "placeholders": {
+      "current": { "type": "String" },
+      "required": { "type": "String" }
+    }
+  },
+  "updateNow": "تحديث الآن",
+  "@updateNow": {
+    "description": "زر فتح المتجر للتحديث"
+  },
+  "mandatoryUpdateStoreMissing": "رابط المتجر غير متوفر. يرجى تحديث التطبيق من المتجر الذي ثبّتَه منه.",
+  "@mandatoryUpdateStoreMissing": {
+    "description": "عند عدم توفير رابط متجر من الخادم"
   }
 }
 

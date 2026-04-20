@@ -12,6 +12,7 @@ import '../../services/exams_service.dart';
 import '../../core/api/api_client.dart';
 import '../../services/wishlist_service.dart';
 import '../../services/profile_service.dart';
+import '../../utils/lesson_access.dart';
 
 /// Modern Course Details Screen with Beautiful UI
 class CourseDetailsScreen extends StatefulWidget {
@@ -45,12 +46,12 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen>
     _checkWishlistStatus();
   }
 
-  Future<void> _loadCourseDetails() async {
+  Future<void> _loadCourseDetails({bool silent = false}) async {
     // If course data is already provided, use it
     if (widget.course != null && widget.course!['id'] != null) {
       final courseId = widget.course!['id']?.toString();
       if (courseId != null && courseId.isNotEmpty) {
-        setState(() => _isLoading = true);
+        if (!silent) setState(() => _isLoading = true);
         try {
           final courseDetails =
               await CoursesService.instance.getCourseDetails(courseId);
@@ -344,6 +345,24 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen>
     return firstLesson;
   }
 
+  void _pushLessonViewer(
+    Map<String, dynamic> lesson, {
+    int? lessonListIndex,
+  }) {
+    if (!mounted) return;
+    final course = _courseData ?? widget.course;
+    final courseId = course?['id']?.toString();
+    final flat = flattenLessonsFromCourse(course);
+    final resolvedIndex = lessonListIndex ?? indexOfLessonInList(flat, lesson);
+
+    context.push(RouteNames.lessonViewer, extra: {
+      'lesson': lesson,
+      'courseId': courseId,
+      'lessonsFlat': flat,
+      'lessonIndex': resolvedIndex,
+    });
+  }
+
   void _playLesson(int index, Map<String, dynamic> lesson) async {
     if (kDebugMode) {
       print('═══════════════════════════════════════════════════════════');
@@ -360,14 +379,8 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen>
       _selectedLessonIndex = index;
     });
 
-    // Navigate to lesson viewer screen
     if (mounted) {
-      final course = _courseData ?? widget.course;
-      final courseId = course?['id']?.toString();
-      context.push(RouteNames.lessonViewer, extra: {
-        'lesson': lesson,
-        'courseId': courseId,
-      });
+      _pushLessonViewer(lesson, lessonListIndex: index);
     }
   }
 
@@ -544,12 +557,7 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen>
                     // Navigate to first lesson
                     final firstLesson = _getFirstLesson();
                     if (firstLesson != null && mounted) {
-                      final course = _courseData ?? widget.course;
-                      final courseId = course?['id']?.toString();
-                      context.push(RouteNames.lessonViewer, extra: {
-                        'lesson': firstLesson,
-                        'courseId': courseId,
-                      });
+                      _pushLessonViewer(firstLesson);
                     }
                   },
                   child: Container(
@@ -876,7 +884,6 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen>
 
     // Build hierarchical structure: topics with nested lessons
     final List<Map<String, dynamic>> topicsWithLessons = [];
-    final List<Map<String, dynamic>> flatLessonsList = [];
 
     // First, try to get lessons from curriculum
     if (curriculum != null && curriculum.isNotEmpty) {
@@ -898,8 +905,6 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen>
               for (var nestedLesson in nestedLessons) {
                 if (nestedLesson is Map<String, dynamic>) {
                   topicLessons.add(nestedLesson);
-                  // Add to flat list for indexing
-                  flatLessonsList.add(nestedLesson);
                 }
               }
             }
@@ -912,7 +917,6 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen>
           } else {
             // This item is a lesson itself (has video or id)
             if (hasVideo || item['id'] != null || hasYoutubeId) {
-              flatLessonsList.add(item);
               topicsWithLessons.add({
                 'is_topic': false,
                 'lesson': item,
@@ -927,7 +931,6 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen>
     if (topicsWithLessons.isEmpty && lessons != null && lessons.isNotEmpty) {
       for (var lesson in lessons) {
         if (lesson is Map<String, dynamic>) {
-          flatLessonsList.add(lesson);
           topicsWithLessons.add({
             'is_topic': false,
             'lesson': lesson,
@@ -935,6 +938,8 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen>
         }
       }
     }
+
+    final flatLessonsList = flattenLessonsFromCourse(course);
 
     if (kDebugMode) {
       print('═══════════════════════════════════════════════════════════');
@@ -1250,17 +1255,29 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen>
 
   Widget _buildLessonItem(Map<String, dynamic> lesson, int index,
       List<Map<String, dynamic>> allLessons) {
-    final isLocked = lesson['is_locked'] == true || lesson['locked'] == true;
+    final isLocked = lessonMapIsLocked(lesson);
     final isCompleted =
         lesson['is_completed'] == true || lesson['completed'] == true;
     final isSelected = index == _selectedLessonIndex;
 
     return GestureDetector(
-      onTap: isLocked
-          ? null
-          : () {
-              _playLesson(index, lesson);
-            },
+      onTap: () {
+        if (isLocked) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content:
+                  Text(lessonLockMessage(lesson), style: GoogleFonts.cairo()),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          );
+          return;
+        }
+        _playLesson(index, lesson);
+      },
       child: Container(
         margin: const EdgeInsets.only(bottom: 12, left: 16),
         padding: const EdgeInsets.all(14),
@@ -1925,12 +1942,7 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen>
                         if (_isEnrolled) {
                           final firstLesson = _getFirstLesson();
                           if (firstLesson != null && mounted) {
-                            final course = _courseData ?? widget.course;
-                            final courseId = course?['id']?.toString();
-                            context.push(RouteNames.lessonViewer, extra: {
-                              'lesson': firstLesson,
-                              'courseId': courseId,
-                            });
+                            _pushLessonViewer(firstLesson);
                           }
                           return;
                         }
@@ -2076,12 +2088,7 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen>
       // Navigate to first lesson if available
       final firstLesson = _getFirstLesson();
       if (firstLesson != null && mounted) {
-        final course = _courseData ?? widget.course;
-        final courseId = course?['id']?.toString();
-        context.push(RouteNames.lessonViewer, extra: {
-          'lesson': firstLesson,
-          'courseId': courseId,
-        });
+        _pushLessonViewer(firstLesson);
       }
     } catch (e) {
       if (kDebugMode) {
@@ -2403,7 +2410,7 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen>
       }
 
       if (mounted) {
-        Navigator.push(
+        final completed = await Navigator.push<bool>(
           context,
           MaterialPageRoute(
             builder: (context) => TrialExamScreen(
@@ -2417,6 +2424,11 @@ class _CourseDetailsScreenState extends State<CourseDetailsScreen>
             ),
           ),
         );
+        if (!mounted) return;
+        if (completed == true) {
+          await _loadCourseDetails(silent: true);
+          _loadCourseExams();
+        }
       }
     } catch (e) {
       if (kDebugMode) {
@@ -2845,7 +2857,7 @@ class _TrialExamScreenState extends State<TrialExamScreen> {
           centerTitle: true,
           leading: IconButton(
             icon: const Icon(Icons.close, color: Colors.white),
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(context, false),
           ),
         ),
         body: Center(
@@ -2890,7 +2902,7 @@ class _TrialExamScreenState extends State<TrialExamScreen> {
         centerTitle: true,
         leading: IconButton(
           icon: const Icon(Icons.close, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
+          onPressed: () => Navigator.pop(context, false),
         ),
         actions: [
           Padding(
@@ -3168,7 +3180,7 @@ class _TrialExamScreenState extends State<TrialExamScreen> {
                 ],
                 const SizedBox(height: 40),
                 GestureDetector(
-                  onTap: () => Navigator.pop(context),
+                  onTap: () => Navigator.pop(context, _examResult != null),
                   child: Container(
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(vertical: 16),

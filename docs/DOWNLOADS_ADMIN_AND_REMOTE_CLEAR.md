@@ -26,10 +26,10 @@ Your backend already has a natural place for a global flag in the **app config**
 
 ### A. Student-initiated (implemented in the app)
 
-**Settings → General Settings → “Clear all offline videos”** / **«مسح كل الفيديوهات المحمّلة»** (localized string keys: `clearAllOfflineVideos`, etc.):
+**Settings → General Settings → “Clear all offline videos”** / **«مسح كل الفيديوهات المحمّلة»**, and the same action from **Progress → Downloads** (header icon when the list is non-empty) (localized string keys: `clearAllOfflineVideos`, etc.):
 
-- Deletes every video file referenced in the local database.
-- Clears all rows in the offline downloads table.
+- Deletes every video file referenced in the local database **for the currently signed-in student account** (`owner_user_id` matches the authenticated user id).
+- Clears those rows only from the offline downloads table (other accounts on the same device keep their rows/files until they clear or delete).
 - Affects **only the current device** and **only this install** of the app.
 
 Use case: policy change, freeing storage, or admin asking users to tap this after revoking downloads.
@@ -64,8 +64,9 @@ Until that API exists, **per-device clearing** is limited to:
 
 ## 4. Related code (Flutter)
 
-- `VideoDownloadService.clearAllDownloadedVideos()` — deletes files + clears DB.
-- `SettingsScreen` — entry point for the user-facing action.
+- `VideoDownloadService.clearAllDownloadedVideos()` — deletes files + clears DB rows for the **current** user only.
+- `SettingsScreen` and `DownloadsScreen` — entry points for the user-facing action.
+- `docs/BACKEND_OFFLINE_DOWNLOADS_STUDENT_SCOPE.md` — concise backend handoff for per-account scoping.
 - `AppConfig` / `FeaturesConfig.downloadsEnabled` — global feature flag (wire UI when ready).
 - `DownloadManager` — writes files under `getApplicationSupportDirectory()`.
 

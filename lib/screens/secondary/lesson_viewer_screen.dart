@@ -17,19 +17,39 @@ import '../../services/courses_service.dart';
 import '../../services/token_storage_service.dart';
 import '../../services/video_download_service.dart';
 import '../../services/youtube_video_service.dart';
+import '../../utils/lesson_access.dart';
 
 /// Lesson Viewer Screen - Modern & Eye-Friendly Design
 class LessonViewerScreen extends StatefulWidget {
   final Map<String, dynamic>? lesson;
   final String? courseId;
 
-  const LessonViewerScreen({super.key, this.lesson, this.courseId});
+  /// Flat course lesson list (same order as course details) for prev/next.
+  final List<Map<String, dynamic>>? allLessons;
+
+  /// Index of [lesson] inside [allLessons], if known.
+  final int? lessonIndexInCourse;
+
+  const LessonViewerScreen({
+    super.key,
+    this.lesson,
+    this.courseId,
+    this.allLessons,
+    this.lessonIndexInCourse,
+  });
 
   @override
   State<LessonViewerScreen> createState() => _LessonViewerScreenState();
 }
 
 class _LessonViewerScreenState extends State<LessonViewerScreen> {
+  /// Working copy so we can switch lessons without a new route.
+  Map<String, dynamic>? _lessonState;
+  List<Map<String, dynamic>>? _allLessons;
+  int? _lessonIndexInCourse;
+
+  Map<String, dynamic>? get _lesson => _lessonState;
+
   PodPlayerController? _controller;
   WebViewController? _webViewController;
   bool _isVideoLoading = true;
@@ -43,6 +63,10 @@ class _LessonViewerScreenState extends State<LessonViewerScreen> {
   bool _isDownloaded = false;
   String? _lastYoutubeUrl;
   Map<String, String> _youtubeQualityUrls = {};
+
+  /// API `video_qualities` (see mobile lesson payload: auto | 1080p | 720p | …).
+  Map<String, String> _serverQualityUrls = {};
+  List<String> _serverQualityOrder = [];
   String? _selectedQuality;
   bool _isLoadingQualities = false;
 
@@ -68,7 +92,17 @@ class _LessonViewerScreenState extends State<LessonViewerScreen> {
 
   String _qualityPickerButtonLabel() {
     if (_selectedQuality != null) {
+      if (_serverQualityUrls.containsKey(_selectedQuality)) {
+        return _serverQualityDisplayLabel(_selectedQuality!);
+      }
       return _youtubeQualityHeightLabel(_selectedQuality!);
+    }
+    if (_serverQualityUrls.isNotEmpty) {
+      final order = _serverQualityOrder
+          .where((k) => _serverQualityUrls.containsKey(k))
+          .toList();
+      final keys = order.isNotEmpty ? order : _serverQualityUrls.keys.toList();
+      return _serverQualityDisplayLabel(keys.first);
     }
     if (_youtubeQualityUrls.isNotEmpty) {
       final heights = _youtubeQualityUrls.keys.map(int.parse).toList()
@@ -78,6 +112,253 @@ class _LessonViewerScreenState extends State<LessonViewerScreen> {
     return 'الجودة';
   }
 
+  String _serverQualityDisplayLabel(String key) {
+    switch (key) {
+      case 'auto':
+        return 'تلقائي';
+      case '1080p':
+        return '1080p FHD';
+      case '720p':
+        return '720p HD';
+      case '480p':
+        return '480p';
+      case '360p':
+        return '360p';
+      default:
+        return key;
+    }
+  }
+
+  void _ingestVideoQualitiesMap(
+    Map<String, dynamic> root,
+    Map<String, String> into,
+  ) {
+    void merge(dynamic raw) {
+      if (raw is! Map) return;
+      for (final e in raw.entries) {
+        final u = _cleanVideoUrl(e.value?.toString());
+        if (u != null) into[e.key.toString()] = u;
+      }
+    }
+
+    merge(root['video_qualities']);
+    merge(root['videoQualities']);
+    final vid = root['video'];
+    if (vid is Map) {
+      final nested = Map<String, dynamic>.from(vid);
+      merge(nested['video_qualities']);
+      merge(nested['videoQualities']);
+    }
+  }
+
+  String? _readNestedDefaultQuality(Map<String, dynamic> m) {
+    String? d = m['default_quality']?.toString();
+    d ??= m['defaultQuality']?.toString();
+    if (d != null && d.isNotEmpty) return d;
+    final v = m['video'];
+    if (v is Map) {
+      final vm = Map<String, dynamic>.from(v);
+      return vm['default_quality']?.toString() ??
+          vm['defaultQuality']?.toString();
+    }
+    return null;
+  }
+
+  List<String>? _readNestedQualityOptions(Map<String, dynamic> m) {
+    dynamic qo = m['quality_options'];
+    if (qo is! List || qo.isEmpty) qo = m['qualityOptions'];
+    if (qo is! List || qo.isEmpty) {
+      final v = m['video'];
+      if (v is Map) {
+        final vm = Map<String, dynamic>.from(v);
+        qo = vm['quality_options'];
+        if (qo is! List || qo.isEmpty) qo = vm['qualityOptions'];
+      }
+    }
+    if (qo is! List) return null;
+    return qo.map((e) => e.toString()).toList();
+  }
+
+  bool _isApiStreamUrl(String url) {
+    try {
+      final p = Uri.parse(url).path;
+      return p.contains('/videos/') && p.contains('/stream');
+    } catch (_) {
+      return false;
+    }
+  }
+
+  ({
+    Map<String, String> qualities,
+    List<String> orderedOptions,
+    String? defaultQuality,
+  }) _mergeApiVideoQualities(
+    Map<String, dynamic> lesson,
+    Map<String, dynamic>? content,
+  ) {
+    final qualities = <String, String>{};
+    _ingestVideoQualitiesMap(lesson, qualities);
+    if (content != null) {
+      _ingestVideoQualitiesMap(content, qualities);
+    }
+
+    final defaultQuality = _readNestedDefaultQuality(content ?? {}) ??
+        _readNestedDefaultQuality(lesson);
+
+    List<String> ordered = [];
+    final fromContent =
+        content != null ? _readNestedQualityOptions(content) : null;
+    final fromLesson = _readNestedQualityOptions(lesson);
+    final qo = fromContent ?? fromLesson;
+    if (qo != null) {
+      for (final k in qo) {
+        if (qualities.containsKey(k)) ordered.add(k);
+      }
+    }
+    if (ordered.isEmpty) {
+      const preferred = ['auto', '1080p', '720p', '480p', '360p'];
+      for (final k in preferred) {
+        if (qualities.containsKey(k)) ordered.add(k);
+      }
+      for (final k in qualities.keys) {
+        if (!ordered.contains(k)) ordered.add(k);
+      }
+    }
+
+    // `quality=auto` is often HLS (.m3u8); ExoPlayer via video_player can fail while MP4 variants work.
+    if (qualities.containsKey('auto') && qualities.length > 1) {
+      const fixed = {'1080p', '720p', '480p', '360p'};
+      if (qualities.keys.any(fixed.contains)) {
+        qualities.remove('auto');
+        ordered.remove('auto');
+      }
+    }
+
+    var resolvedDefault = defaultQuality;
+    if (resolvedDefault != null && !qualities.containsKey(resolvedDefault)) {
+      resolvedDefault = null;
+    }
+
+    return (
+      qualities: qualities,
+      orderedOptions: ordered,
+      defaultQuality: resolvedDefault,
+    );
+  }
+
+  bool _urlsEqualIgnoringAuth(String a, String b) {
+    String norm(String u) {
+      final uri = Uri.parse(u);
+      final q = Map<String, String>.from(uri.queryParameters)..remove('token');
+      final query = Uri(queryParameters: q).query;
+      return '${uri.scheme}://${uri.host}${uri.path}${query.isNotEmpty ? '?$query' : ''}';
+    }
+
+    try {
+      return norm(a) == norm(b);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  String? _findQualityKeyForUrl(Map<String, String> qualities, String url) {
+    for (final e in qualities.entries) {
+      if (_urlsEqualIgnoringAuth(e.value, url)) return e.key;
+    }
+    return null;
+  }
+
+  String? _pickInitialDirectPlayUrl(
+    String? lessonVideoUrl,
+    ({
+      Map<String, String> qualities,
+      List<String> orderedOptions,
+      String? defaultQuality,
+    }) bundle,
+  ) {
+    final q = bundle.qualities;
+    if (q.isEmpty) return _cleanVideoUrl(lessonVideoUrl);
+
+    final def = bundle.defaultQuality;
+    if (def != null && q.containsKey(def)) {
+      return q[def];
+    }
+
+    final cleaned = _cleanVideoUrl(lessonVideoUrl);
+    if (cleaned != null) {
+      for (final e in q.entries) {
+        if (_urlsEqualIgnoringAuth(cleaned, e.value)) return e.value;
+      }
+      final allStreamVariants = q.values.every((u) => _isApiStreamUrl(u));
+      final cleanedIsStream = _isApiStreamUrl(cleaned);
+      if (q.isNotEmpty && allStreamVariants && !cleanedIsStream) {
+        final d = bundle.defaultQuality;
+        if (d != null && q.containsKey(d)) return q[d];
+        for (final k in bundle.orderedOptions) {
+          final u = q[k];
+          if (u != null) return u;
+        }
+        for (final k in ['720p', '1080p', '480p', '360p', 'auto']) {
+          final u = q[k];
+          if (u != null) return u;
+        }
+        return q.values.first;
+      }
+      return cleaned;
+    }
+
+    for (final k in bundle.orderedOptions) {
+      final u = q[k];
+      if (u != null) return u;
+    }
+    for (final k in ['720p', '1080p', '480p', '360p', 'auto']) {
+      final u = q[k];
+      if (u != null) return u;
+    }
+    return q.values.first;
+  }
+
+  Future<String> _videoUrlWithAccessToken(String videoUrl) async {
+    final token = await TokenStorageService.instance.getAccessToken();
+    if (token == null || token.isEmpty) return videoUrl;
+    final uri = Uri.parse(videoUrl);
+    return uri.replace(queryParameters: {
+      ...uri.queryParameters,
+      'token': token,
+    }).toString();
+  }
+
+  /// Many LMS streams require `Authorization` on Range requests; query `token` alone can 403.
+  Future<Map<String, String>> _videoBearerHeaders() async {
+    final token = await TokenStorageService.instance.getAccessToken();
+    if (token == null || token.isEmpty) return <String, String>{};
+    return {'Authorization': 'Bearer $token'};
+  }
+
+  Future<void> _initPodNetworkFromUrl(
+    String videoUrl, {
+    Duration seekTo = Duration.zero,
+  }) async {
+    final withToken = await _videoUrlWithAccessToken(videoUrl);
+    final headers = await _videoBearerHeaders();
+    _controller?.dispose();
+    _controller = null;
+    _controller = PodPlayerController(
+      playVideoFrom: PlayVideoFrom.network(
+        withToken,
+        httpHeaders: headers,
+      ),
+      podPlayerConfig: const PodPlayerConfig(
+        autoPlay: false,
+        isLooping: false,
+      ),
+    );
+    await _controller!.initialise();
+    if (seekTo > Duration.zero) {
+      await _controller!.videoSeekTo(seekTo);
+    }
+  }
+
   Future<void> _fetchYoutubeQualities(String youtubeUrl) async {
     YoutubeExplode? yt;
     try {
@@ -85,6 +366,8 @@ class _LessonViewerScreenState extends State<LessonViewerScreen> {
       setState(() {
         _isLoadingQualities = true;
         _youtubeQualityUrls = {};
+        _serverQualityUrls = {};
+        _serverQualityOrder = [];
       });
 
       yt = YoutubeExplode();
@@ -144,7 +427,72 @@ class _LessonViewerScreenState extends State<LessonViewerScreen> {
     }
   }
 
+  Future<void> _switchToServerQuality(String qualityKey) async {
+    final url = _serverQualityUrls[qualityKey];
+    if (url == null || url.isEmpty) return;
+
+    final savedPosition =
+        _controller?.videoPlayerValue?.position ?? Duration.zero;
+    final revertToKey = _selectedQuality;
+
+    if (!mounted) return;
+    setState(() {
+      _isVideoLoading = true;
+      _selectedQuality = qualityKey;
+    });
+
+    try {
+      await _initPodNetworkFromUrl(url, seekTo: savedPosition);
+      if (!mounted) return;
+      setState(() {
+        _isVideoLoading = false;
+        _useWebViewFallback = false;
+      });
+    } catch (e, st) {
+      if (kDebugMode) {
+        print('❌ _switchToServerQuality failed: $e');
+        print(st);
+      }
+      if (!mounted) return;
+
+      if (revertToKey != null &&
+          revertToKey != qualityKey &&
+          _serverQualityUrls.containsKey(revertToKey)) {
+        final revertUrl = _serverQualityUrls[revertToKey]!;
+        setState(() {
+          _selectedQuality = revertToKey;
+        });
+        try {
+          await _initPodNetworkFromUrl(revertUrl, seekTo: savedPosition);
+          if (mounted) {
+            setState(() {
+              _isVideoLoading = false;
+              _useWebViewFallback = false;
+            });
+          }
+          return;
+        } catch (e2, st2) {
+          if (kDebugMode) {
+            print('❌ Revert to previous quality failed: $e2');
+            print(st2);
+          }
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _isVideoLoading = false;
+        });
+      }
+    }
+  }
+
   Future<void> _switchToQuality(String qualityKey) async {
+    if (_serverQualityUrls.containsKey(qualityKey)) {
+      await _switchToServerQuality(qualityKey);
+      return;
+    }
+
     final url = _youtubeQualityUrls[qualityKey];
     if (url == null || url.isEmpty) return;
 
@@ -286,9 +634,112 @@ class _LessonViewerScreenState extends State<LessonViewerScreen> {
     );
   }
 
+  Widget _buildServerQualityPicker() {
+    final keys = _serverQualityOrder
+        .where((k) => _serverQualityUrls.containsKey(k))
+        .toList();
+    final ordered = keys.isNotEmpty ? keys : _serverQualityUrls.keys.toList();
+
+    final selected = _selectedQuality;
+    final borderAccent = selected != null
+        ? AppColors.purple
+        : Colors.white.withValues(alpha: 0.7);
+
+    return PopupMenuButton<String>(
+      tooltip: 'الجودة',
+      color: const Color(0xFF1A1A2E),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      onSelected: (q) => _switchToQuality(q),
+      itemBuilder: (context) {
+        return ordered.map((k) {
+          final isSelected = selected == k;
+          final showHd = k == '720p' || k == '1080p';
+          return PopupMenuItem<String>(
+            value: k,
+            child: Row(
+              children: [
+                Icon(
+                  isSelected
+                      ? Icons.radio_button_checked
+                      : Icons.radio_button_unchecked,
+                  color: isSelected ? AppColors.purple : Colors.white54,
+                  size: 18,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    _serverQualityDisplayLabel(k),
+                    style: GoogleFonts.cairo(
+                      color: Colors.white,
+                      fontWeight:
+                          isSelected ? FontWeight.bold : FontWeight.normal,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+                if (showHd)
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: AppColors.purple.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      'HD',
+                      style: GoogleFonts.cairo(
+                        color: AppColors.purple,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          );
+        }).toList();
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.45),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: borderAccent, width: 1.2),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.hd_rounded,
+              color: selected != null ? AppColors.purple : Colors.white,
+              size: 22,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              _qualityPickerButtonLabel(),
+              style: GoogleFonts.cairo(
+                color: selected != null ? AppColors.purple : Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const Icon(Icons.arrow_drop_down, color: Colors.white70),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
+    final w = widget.lesson;
+    _lessonState = w == null ? null : Map<String, dynamic>.from(w);
+    _allLessons = widget.allLessons;
+    _lessonIndexInCourse = widget.lessonIndexInCourse ??
+        (_allLessons != null && _lessonState != null
+            ? indexOfLessonInList(_allLessons!, _lessonState!)
+            : null);
     _initializeDownloadService();
     _loadLessonContent().then((_) {
       // Initialize video after content is loaded (or failed)
@@ -309,7 +760,7 @@ class _LessonViewerScreenState extends State<LessonViewerScreen> {
   }
 
   Future<void> _checkIfDownloaded() async {
-    final lesson = widget.lesson;
+    final lesson = _lesson;
     if (lesson == null) return;
 
     final lessonId = lesson['id']?.toString();
@@ -324,7 +775,7 @@ class _LessonViewerScreenState extends State<LessonViewerScreen> {
   }
 
   Future<void> _loadLessonContent() async {
-    final lesson = widget.lesson;
+    final lesson = _lesson;
     if (lesson == null) {
       setState(() {
         _isLoadingContent = false;
@@ -411,7 +862,7 @@ class _LessonViewerScreenState extends State<LessonViewerScreen> {
   }
 
   Future<void> _initializeVideo() async {
-    final lesson = widget.lesson;
+    final lesson = _lesson;
     if (lesson == null) {
       setState(() => _isVideoLoading = false);
       return;
@@ -453,12 +904,27 @@ class _LessonViewerScreenState extends State<LessonViewerScreen> {
 
     videoId = videoId ?? '';
 
+    final qb = _mergeApiVideoQualities(lesson, _lessonContent);
+
+    String? resolvedUrl = videoUrl;
+    if (resolvedUrl == null || resolvedUrl.isEmpty) {
+      if (qb.qualities.isNotEmpty) {
+        resolvedUrl = _pickInitialDirectPlayUrl(null, qb);
+      }
+    } else if (qb.qualities.isNotEmpty &&
+        !resolvedUrl.contains('youtube.com') &&
+        !resolvedUrl.contains('youtu.be')) {
+      resolvedUrl = _pickInitialDirectPlayUrl(resolvedUrl, qb);
+    }
+
     if (kDebugMode) {
       print('═══════════════════════════════════════════════════════════');
       print('🎥 INITIALIZING VIDEO IN LESSON VIEWER');
       print('═══════════════════════════════════════════════════════════');
       print('Video ID: $videoId');
       print('Video URL (cleaned): $videoUrl');
+      print('Resolved play URL: $resolvedUrl');
+      print('API video_qualities: ${qb.qualities.keys.toList()}');
       print('Lesson ID: ${lesson['id']}');
       print('Lesson Title: ${lesson['title']}');
       print('Video Object: $videoData');
@@ -469,21 +935,57 @@ class _LessonViewerScreenState extends State<LessonViewerScreen> {
 
     try {
       // Use video URL if available, otherwise use YouTube ID
-      if (videoUrl != null && videoUrl.isNotEmpty) {
+      if (resolvedUrl != null && resolvedUrl.isNotEmpty) {
         // Check if it's a YouTube URL
-        if (videoUrl.contains('youtube.com') || videoUrl.contains('youtu.be')) {
-          if (kDebugMode) {
-            print('📺 Using YouTube URL: $videoUrl');
+        if (resolvedUrl.contains('youtube.com') ||
+            resolvedUrl.contains('youtu.be')) {
+          if (mounted) {
+            setState(() {
+              _serverQualityUrls = {};
+              _serverQualityOrder = [];
+            });
           }
-          await _initializeYoutubeVideo(videoUrl);
+          if (kDebugMode) {
+            print('📺 Using YouTube URL: $resolvedUrl');
+          }
+          await _initializeYoutubeVideo(resolvedUrl);
         } else {
-          // Direct video URL from server - use pod_player with network
-          if (kDebugMode) {
-            print('📹 Using pod_player for direct video URL: $videoUrl');
+          final playUrl = resolvedUrl;
+          if (mounted) {
+            setState(() {
+              if (qb.qualities.isEmpty) {
+                _serverQualityUrls = {};
+                _serverQualityOrder = [];
+                _selectedQuality = null;
+              } else {
+                _serverQualityUrls = qb.qualities;
+                _serverQualityOrder = qb.orderedOptions;
+                _selectedQuality =
+                    _findQualityKeyForUrl(qb.qualities, playUrl) ??
+                        (qb.defaultQuality != null &&
+                                qb.qualities.containsKey(qb.defaultQuality!)
+                            ? qb.defaultQuality
+                            : null) ??
+                        (qb.orderedOptions.isNotEmpty
+                            ? qb.orderedOptions.first
+                            : qb.qualities.keys.first);
+              }
+              _youtubeQualityUrls = {};
+              _isLoadingQualities = false;
+            });
           }
-          _initializeDirectVideo(videoUrl);
+          if (kDebugMode) {
+            print('📹 Using pod_player for direct video URL: $playUrl');
+          }
+          await _initializeDirectVideo(playUrl);
         }
       } else if (videoId.isNotEmpty) {
+        if (mounted) {
+          setState(() {
+            _serverQualityUrls = {};
+            _serverQualityOrder = [];
+          });
+        }
         // Fallback to YouTube ID
         if (kDebugMode) {
           print('📺 Using YouTube ID fallback: $videoId');
@@ -511,6 +1013,12 @@ class _LessonViewerScreenState extends State<LessonViewerScreen> {
 
   Future<void> _initializeYoutubeVideo(String youtubeUrl) async {
     try {
+      final canonical = canonicalYoutubeWatchUrl(youtubeUrl);
+      if (kDebugMode && canonical != youtubeUrl) {
+        print(
+            '📺 Normalized YouTube URL for playback: $youtubeUrl → $canonical');
+      }
+      youtubeUrl = canonical;
       _lastYoutubeUrl = youtubeUrl;
       _controller?.dispose();
       _controller = null;
@@ -519,6 +1027,8 @@ class _LessonViewerScreenState extends State<LessonViewerScreen> {
         _useWebViewFallback = false;
         _isVideoLoading = true;
         _youtubeQualityUrls = {};
+        _serverQualityUrls = {};
+        _serverQualityOrder = [];
         _selectedQuality = null;
       });
 
@@ -544,6 +1054,8 @@ class _LessonViewerScreenState extends State<LessonViewerScreen> {
     if (!mounted) return;
     setState(() {
       _youtubeQualityUrls = {};
+      _serverQualityUrls = {};
+      _serverQualityOrder = [];
       _selectedQuality = null;
       _isLoadingQualities = false;
       _isVideoLoading = true;
@@ -579,66 +1091,33 @@ class _LessonViewerScreenState extends State<LessonViewerScreen> {
         print('📹 Initializing direct video with pod_player: $videoUrl');
       }
 
-      // Get authorization token for video access
-      final token = await TokenStorageService.instance.getAccessToken();
-
-      // Add token as query parameter if available
-      String videoUrlWithToken = videoUrl;
-      if (token != null && token.isNotEmpty) {
-        final uri = Uri.parse(videoUrl);
-        videoUrlWithToken = uri.replace(queryParameters: {
-          ...uri.queryParameters,
-          'token': token,
-        }).toString();
-
-        if (kDebugMode) {
-          print('🔑 Added token to video URL');
-        }
-      }
-
-      if (mounted) {
-        setState(() {
-          _youtubeQualityUrls = {};
+      if (!mounted) return;
+      setState(() {
+        _youtubeQualityUrls = {};
+        _isLoadingQualities = false;
+        _useWebViewFallback = false;
+        _isVideoLoading = true;
+        if (_serverQualityUrls.isEmpty) {
           _selectedQuality = null;
-          _isLoadingQualities = false;
-        });
-      }
+        }
+      });
 
-      // Use pod_player with PlayVideoFrom.network()
-      _controller = PodPlayerController(
-        playVideoFrom: PlayVideoFrom.network(videoUrlWithToken),
-        podPlayerConfig: const PodPlayerConfig(
-          autoPlay: false,
-          isLooping: false,
-        ),
-      )..initialise().then((_) {
-          if (mounted) {
-            setState(() {
-              _isVideoLoading = false;
-              _useWebViewFallback = false;
-            });
-          }
-          if (kDebugMode) {
-            print('✅ Direct video initialized successfully with pod_player');
-          }
-        }).catchError((error) {
-          if (kDebugMode) {
-            print('❌ Error initializing direct video with pod_player: $error');
-            print('   Falling back to WebView...');
-          }
-          // Fallback to WebView if pod_player fails
-          if (mounted) {
-            _initializeWebView(videoUrl);
-          }
-        });
-    } catch (e) {
+      await _initPodNetworkFromUrl(videoUrl);
+      if (!mounted) return;
+      setState(() {
+        _isVideoLoading = false;
+      });
       if (kDebugMode) {
-        print('❌ Error in _initializeDirectVideo: $e');
+        print('✅ Direct video initialized successfully with pod_player');
+      }
+    } catch (error, st) {
+      if (kDebugMode) {
+        print('❌ Error initializing direct video with pod_player: $error');
+        print(st);
         print('   Falling back to WebView...');
       }
-      // Fallback to WebView if there's an error
       if (mounted) {
-        _initializeWebView(videoUrl);
+        await _initializeWebView(videoUrl);
       }
     }
   }
@@ -1099,7 +1578,7 @@ class _LessonViewerScreenState extends State<LessonViewerScreen> {
       ),
     );
 
-    final lesson = widget.lesson;
+    final lesson = _lesson;
     if (lesson == null) {
       return Scaffold(
         backgroundColor: const Color(0xFF0F0F1A),
@@ -1202,6 +1681,11 @@ class _LessonViewerScreenState extends State<LessonViewerScreen> {
                         color: AppColors.purple,
                       ),
                     ),
+                  )
+                else if (_serverQualityUrls.length > 1)
+                  Padding(
+                    padding: const EdgeInsets.only(left: 8),
+                    child: _buildServerQualityPicker(),
                   )
                 else if (_youtubeQualityUrls.isNotEmpty)
                   Padding(
@@ -1547,7 +2031,7 @@ class _LessonViewerScreenState extends State<LessonViewerScreen> {
                     'الدرس السابق',
                     Icons.arrow_forward_rounded,
                     false,
-                    () => context.pop(),
+                    _onPreviousLesson,
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -1557,7 +2041,7 @@ class _LessonViewerScreenState extends State<LessonViewerScreen> {
                     'الدرس التالي',
                     Icons.arrow_back_rounded,
                     true,
-                    () => context.pop(),
+                    _onNextLesson,
                   ),
                 ),
               ],
@@ -1567,6 +2051,93 @@ class _LessonViewerScreenState extends State<LessonViewerScreen> {
         ),
       ),
     );
+  }
+
+  void _onPreviousLesson() {
+    final flat = _allLessons;
+    final idx = _lessonIndexInCourse;
+    if (flat == null || idx == null) {
+      context.pop();
+      return;
+    }
+    if (idx <= 0) {
+      context.pop();
+      return;
+    }
+    final prev = flat[idx - 1];
+    if (lessonMapIsLocked(prev)) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(lessonLockMessage(prev), style: GoogleFonts.cairo()),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+    _switchToLesson(prev, idx - 1);
+  }
+
+  void _onNextLesson() {
+    final flat = _allLessons;
+    final idx = _lessonIndexInCourse;
+    if (flat == null || idx == null) {
+      context.pop();
+      return;
+    }
+    if (idx >= flat.length - 1) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('لا يوجد درس تالي', style: GoogleFonts.cairo()),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+    final nxt = flat[idx + 1];
+    if (lessonMapIsLocked(nxt)) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(lessonLockMessage(nxt), style: GoogleFonts.cairo()),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+    _switchToLesson(nxt, idx + 1);
+  }
+
+  Future<void> _switchToLesson(Map<String, dynamic> next, int newIndex) async {
+    _controller?.dispose();
+    _controller = null;
+    _webViewController = null;
+    if (_tempVideoFile != null) {
+      try {
+        _tempVideoFile!.deleteSync();
+      } catch (_) {}
+      _tempVideoFile = null;
+    }
+    if (!mounted) return;
+    setState(() {
+      _lessonState = Map<String, dynamic>.from(next);
+      _lessonIndexInCourse = newIndex;
+      _lessonContent = null;
+      _isLoadingContent = true;
+      _isVideoLoading = true;
+      _useWebViewFallback = false;
+      _youtubeQualityUrls = {};
+      _serverQualityUrls = {};
+      _serverQualityOrder = [];
+      _selectedQuality = null;
+      _isLoadingQualities = false;
+      _isDownloaded = false;
+    });
+    await _loadLessonContent();
+    if (!mounted) return;
+    await _initializeVideo();
+    await _checkIfDownloaded();
   }
 
   Widget _buildStatBadge(IconData icon, String text) {
@@ -1685,7 +2256,7 @@ class _LessonViewerScreenState extends State<LessonViewerScreen> {
   }
 
   Future<void> _handleDownload() async {
-    final lesson = widget.lesson;
+    final lesson = _lesson;
     if (lesson == null) return;
 
     final lessonId = lesson['id']?.toString();
@@ -1708,12 +2279,32 @@ class _LessonViewerScreenState extends State<LessonViewerScreen> {
 
     // التحميل يُحفظ في مجلد التطبيق الخاص — لا يحتاج صلاحيات التخزين/الوسائط.
 
+    final qb = _mergeApiVideoQualities(lesson, _lessonContent);
+
     // الحصول على رابط الفيديو (نفس منطق التشغيل، مع تنظيف الرابط)
     String? rawVideoUrl = _lessonContent?['video']?['url']?.toString() ??
         lesson['video_url']?.toString() ??
         lesson['video']?['url']?.toString();
 
-    final videoUrl = _cleanVideoUrl(rawVideoUrl);
+    if ((rawVideoUrl == null || rawVideoUrl.isEmpty) &&
+        qb.qualities.isNotEmpty) {
+      rawVideoUrl = _pickInitialDirectPlayUrl(null, qb);
+    }
+
+    String? videoUrl = _cleanVideoUrl(rawVideoUrl);
+    if (qb.qualities.isNotEmpty) {
+      String? fixed;
+      for (final k in ['720p', '1080p', '480p', '360p']) {
+        final u = qb.qualities[k];
+        if (u != null) {
+          fixed = u;
+          break;
+        }
+      }
+      if (fixed != null) {
+        videoUrl = _cleanVideoUrl(fixed);
+      }
+    }
 
     if (videoUrl == null || videoUrl.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(

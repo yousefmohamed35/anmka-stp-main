@@ -261,12 +261,27 @@ class AppRouter {
           final extra = state.extra;
           Map<String, dynamic>? lesson;
           String? courseId;
+          List<Map<String, dynamic>>? allLessons;
+          int? lessonIndexInCourse;
 
           if (extra is Map<String, dynamic>) {
             // Check if it's a wrapper map with lesson and courseId
             if (extra.containsKey('lesson')) {
               lesson = extra['lesson'] as Map<String, dynamic>?;
               courseId = extra['courseId']?.toString();
+              final rawFlat = extra['lessonsFlat'];
+              if (rawFlat is List) {
+                allLessons = rawFlat
+                    .whereType<Map>()
+                    .map((e) => Map<String, dynamic>.from(e))
+                    .toList();
+              }
+              final idxRaw = extra['lessonIndex'];
+              if (idxRaw is int) {
+                lessonIndexInCourse = idxRaw;
+              } else if (idxRaw != null) {
+                lessonIndexInCourse = int.tryParse(idxRaw.toString());
+              }
             } else {
               // It's the lesson object itself
               lesson = extra;
@@ -278,6 +293,8 @@ class AppRouter {
             child: LessonViewerScreen(
               lesson: lesson,
               courseId: courseId,
+              allLessons: allLessons,
+              lessonIndexInCourse: lessonIndexInCourse,
             ),
           );
         },

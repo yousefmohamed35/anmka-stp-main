@@ -134,6 +134,8 @@ class AuthService {
           refreshToken: authResponse.refreshToken,
         );
         await TokenStorageService.instance.saveUserRole(authResponse.user.role);
+        await TokenStorageService.instance
+            .saveLoggedInUserId(authResponse.user.id);
 
         // Verify token was saved to cache
         print('🔍 Verifying token was saved to cache...');
@@ -304,6 +306,8 @@ class AuthService {
           refreshToken: authResponse.refreshToken,
         );
         await TokenStorageService.instance.saveUserRole(authResponse.user.role);
+        await TokenStorageService.instance
+            .saveLoggedInUserId(authResponse.user.id);
 
         // Verify token was saved to cache
         print('🔍 Verifying token was saved to cache...');
@@ -671,6 +675,8 @@ class AuthService {
           refreshToken: authResponse.refreshToken,
         );
         await TokenStorageService.instance.saveUserRole(authResponse.user.role);
+        await TokenStorageService.instance
+            .saveLoggedInUserId(authResponse.user.id);
 
         // Verify token was cached
         final savedToken = await TokenStorageService.instance.getAccessToken();
@@ -848,6 +854,8 @@ class AuthService {
           refreshToken: authResponse.refreshToken,
         );
         await TokenStorageService.instance.saveUserRole(authResponse.user.role);
+        await TokenStorageService.instance
+            .saveLoggedInUserId(authResponse.user.id);
 
         // Verify token was cached
         final savedToken = await TokenStorageService.instance.getAccessToken();

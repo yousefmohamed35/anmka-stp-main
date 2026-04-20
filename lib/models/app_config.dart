@@ -8,6 +8,10 @@ class AppConfig {
   final String version;
   final bool forceUpdate;
   final String minVersion;
+  /// Optional: opens when user taps Update (any platform).
+  final String? updateUrl;
+  final String? androidStoreUrl;
+  final String? iosStoreUrl;
   final ThemeConfig theme;
   final FeaturesConfig features;
   final SocialLinksConfig socialLinks;
@@ -21,6 +25,9 @@ class AppConfig {
     required this.version,
     required this.forceUpdate,
     required this.minVersion,
+    this.updateUrl,
+    this.androidStoreUrl,
+    this.iosStoreUrl,
     required this.theme,
     required this.features,
     required this.socialLinks,
@@ -36,6 +43,9 @@ class AppConfig {
       version: json['version'] as String? ?? '1.0.0',
       forceUpdate: json['force_update'] as bool? ?? false,
       minVersion: json['min_version'] as String? ?? '1.0.0',
+      updateUrl: json['update_url'] as String?,
+      androidStoreUrl: json['android_store_url'] as String?,
+      iosStoreUrl: json['ios_store_url'] as String?,
       theme: ThemeConfig.fromJson(json['theme'] as Map<String, dynamic>? ?? {}),
       features: FeaturesConfig.fromJson(json['features'] as Map<String, dynamic>? ?? {}),
       socialLinks: SocialLinksConfig.fromJson(json['social_links'] as Map<String, dynamic>? ?? {}),
@@ -52,6 +62,9 @@ class AppConfig {
       'version': version,
       'force_update': forceUpdate,
       'min_version': minVersion,
+      if (updateUrl != null) 'update_url': updateUrl,
+      if (androidStoreUrl != null) 'android_store_url': androidStoreUrl,
+      if (iosStoreUrl != null) 'ios_store_url': iosStoreUrl,
       'theme': theme.toJson(),
       'features': features.toJson(),
       'social_links': socialLinks.toJson(),

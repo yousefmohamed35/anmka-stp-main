@@ -39,6 +39,90 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
     _loadDownloads();
   }
 
+  Future<void> _confirmAndClearAllOfflineVideos() async {
+    final l10n = context.l10n;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(
+          l10n.clearAllOfflineVideosConfirmTitle,
+          style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+        ),
+        content: Text(
+          l10n.clearAllOfflineVideosConfirmBody,
+          style: GoogleFonts.cairo(),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(l10n.cancel, style: GoogleFonts.cairo()),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: Text(l10n.delete, style: GoogleFonts.cairo()),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          content: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(width: 20),
+              Expanded(
+                child: Text(
+                  l10n.clearAllOfflineVideosProgress,
+                  style: GoogleFonts.cairo(),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    try {
+      await _downloadService.initialize();
+      final cleared = await _downloadService.clearAllDownloadedVideos();
+      if (mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              cleared == 0
+                  ? l10n.clearAllOfflineVideosNothing
+                  : l10n.clearAllOfflineVideosSuccess(cleared),
+              style: GoogleFonts.cairo(),
+            ),
+          ),
+        );
+      }
+      _loadDownloads();
+    } catch (e) {
+      if (mounted) {
+        Navigator.of(context).pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              l10n.clearAllOfflineVideosFailed,
+              style: GoogleFonts.cairo(),
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   Future<void> _loadDownloads() async {
     setState(() => _isLoading = true);
     try {
@@ -137,10 +221,29 @@ class _DownloadsScreenState extends State<DownloadsScreen> {
                         ),
                       ),
                       const SizedBox(width: 16), // gap-4
-                      Text(
-                        context.l10n.downloads,
-                        style: AppTextStyles.h3(color: Colors.white),
+                      Expanded(
+                        child: Text(
+                          context.l10n.downloads,
+                          style: AppTextStyles.h3(color: Colors.white),
+                        ),
                       ),
+                      if (!_isLoading && _downloadedVideos.isNotEmpty)
+                        GestureDetector(
+                          onTap: _confirmAndClearAllOfflineVideos,
+                          child: Container(
+                            width: 40,
+                            height: 40,
+                            decoration: const BoxDecoration(
+                              color: AppColors.whiteOverlay20,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.delete_sweep_outlined,
+                              color: Colors.white,
+                              size: 22,
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                   const SizedBox(height: 16), // mb-4

@@ -834,6 +834,74 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
+  static const String _kBannerFallbackAsset =
+      'assets/images/student-character.png';
+
+  Widget _bannerHeroImagePlaceholder() {
+    return Center(
+      child: SizedBox(
+        width: 40,
+        height: 40,
+        child: CircularProgressIndicator(
+          strokeWidth: 2.5,
+          color: Colors.white.withOpacity(0.9),
+        ),
+      ),
+    );
+  }
+
+  Widget _bannerHeroImageFallback() {
+    return Image.asset(
+      _kBannerFallbackAsset,
+      fit: BoxFit.contain,
+      alignment: Alignment.bottomCenter,
+      filterQuality: FilterQuality.medium,
+      errorBuilder: (_, __, ___) => Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.12),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.white.withOpacity(0.18)),
+        ),
+        child: const Icon(
+          Icons.school_rounded,
+          size: 56,
+          color: Colors.white70,
+        ),
+      ),
+    );
+  }
+
+  /// Hero artwork for the home banner: glow, shadow, and smooth load.
+  Widget _buildBannerHeroImage(String? imageUrl) {
+    final fallback = _bannerHeroImageFallback();
+
+    if (imageUrl == null || imageUrl.isEmpty) {
+      return fallback;
+    }
+
+    return Image.network(
+      imageUrl,
+      fit: BoxFit.contain,
+      alignment: Alignment.bottomCenter,
+      filterQuality: FilterQuality.medium,
+      loadingBuilder: (context, child, loadingProgress) {
+        if (loadingProgress == null) return child;
+        return _bannerHeroImagePlaceholder();
+      },
+      frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+        if (wasSynchronouslyLoaded) return child;
+        return AnimatedOpacity(
+          opacity: frame == null ? 0 : 1,
+          duration: const Duration(milliseconds: 420),
+          curve: Curves.easeOutCubic,
+          child: child,
+        );
+      },
+      errorBuilder: (_, __, ___) => fallback,
+    );
+  }
+
   Widget _build3DBanner() {
     final heroBanner = _homeData?['hero_banner'] as Map<String, dynamic>?;
     final title = heroBanner?['title']?.toString();
@@ -869,6 +937,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           );
         },
         child: Container(
+          height: 165,
           decoration: BoxDecoration(
             gradient: const LinearGradient(
               begin: Alignment.topLeft,
@@ -920,49 +989,97 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
                 // Main Row - Text on right, Character on left
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // 3D Character - Inside banner on left
+                    // Hero image — glow, ground shadow, aligned to bottom
                     Expanded(
                       flex: 4,
-                      child: Transform.translate(
-                        offset: const Offset(-10, 10),
-                        child: imageUrl != null && imageUrl.isNotEmpty
-                            ? Image.network(
-                                imageUrl,
-                                fit: BoxFit.contain,
-                                errorBuilder: (_, __, ___) => Image.asset(
-                                  'assets/images/student-character.png',
-                                  fit: BoxFit.contain,
-                                  errorBuilder: (_, __, ___) => Container(
-                                    margin: const EdgeInsets.all(20),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white.withOpacity(0.1),
-                                      borderRadius: BorderRadius.circular(16),
-                                    ),
-                                    child: const Icon(
-                                      Icons.school_rounded,
-                                      size: 60,
-                                      color: Colors.white54,
-                                    ),
-                                  ),
-                                ),
-                              )
-                            : Image.asset(
-                                'assets/images/student-character.png',
-                                fit: BoxFit.contain,
-                                errorBuilder: (_, __, ___) => Container(
-                                  margin: const EdgeInsets.all(20),
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          final w = constraints.maxWidth;
+                          final artH = constraints.maxHeight * 0.9;
+                          return Stack(
+                            clipBehavior: Clip.none,
+                            alignment: Alignment.bottomCenter,
+                            children: [
+                              // Soft spotlight behind the figure
+                              Positioned(
+                                left: w * 0.02,
+                                right: w * 0.12,
+                                bottom: 4,
+                                height: constraints.maxHeight * 0.92,
+                                child: DecoratedBox(
                                   decoration: BoxDecoration(
-                                    color: Colors.white.withOpacity(0.1),
-                                    borderRadius: BorderRadius.circular(16),
-                                  ),
-                                  child: const Icon(
-                                    Icons.school_rounded,
-                                    size: 60,
-                                    color: Colors.white54,
+                                    borderRadius: BorderRadius.circular(32),
+                                    gradient: RadialGradient(
+                                      center: const Alignment(0, -0.15),
+                                      radius: 0.95,
+                                      colors: [
+                                        Colors.white.withOpacity(0.28),
+                                        Colors.white.withOpacity(0.08),
+                                        Colors.transparent,
+                                      ],
+                                      stops: const [0.0, 0.42, 1.0],
+                                    ),
                                   ),
                                 ),
                               ),
+                              // Ground shadow
+                              Positioned(
+                                bottom: 10,
+                                left: w * 0.12,
+                                right: w * 0.18,
+                                child: Container(
+                                  height: 14,
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(999),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.22),
+                                        blurRadius: 16,
+                                        spreadRadius: 0,
+                                        offset: const Offset(0, 4),
+                                      ),
+                                    ],
+                                  ),
+                                  child: DecoratedBox(
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(999),
+                                      gradient: LinearGradient(
+                                        colors: [
+                                          Colors.black.withOpacity(0.18),
+                                          Colors.black.withOpacity(0.06),
+                                          Colors.transparent,
+                                        ],
+                                        stops: const [0.0, 0.5, 1.0],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              Positioned.fill(
+                                child: Align(
+                                  alignment: Alignment.bottomCenter,
+                                  child: Padding(
+                                    padding:
+                                        const EdgeInsets.fromLTRB(4, 8, 8, 2),
+                                    child: Transform.translate(
+                                      offset: const Offset(-6, 2),
+                                      child: RepaintBoundary(
+                                        child: SizedBox(
+                                          height: artH,
+                                          width: double.infinity,
+                                          child:
+                                              _buildBannerHeroImage(imageUrl),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          );
+                        },
                       ),
                     ),
 

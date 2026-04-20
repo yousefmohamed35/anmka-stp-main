@@ -11,6 +11,7 @@ class TokenStorageService {
   static const String _keyRefreshToken = 'refresh_token';
   static const String _keyUser = 'user_data';
   static const String _keyUserRole = 'user_role';
+  static const String _keyLoggedInUserId = 'logged_in_user_id';
 
   /// Save access token
   Future<void> saveAccessToken(String token) async {
@@ -105,6 +106,21 @@ class TokenStorageService {
     return prefs.getString(_keyUserRole);
   }
 
+  /// Persists the authenticated account id for offline features (e.g. scoped downloads).
+  Future<void> saveLoggedInUserId(String userId) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (userId.isEmpty) {
+      await prefs.remove(_keyLoggedInUserId);
+    } else {
+      await prefs.setString(_keyLoggedInUserId, userId);
+    }
+  }
+
+  Future<String?> getLoggedInUserId() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_keyLoggedInUserId);
+  }
+
   /// Clear all tokens and role
   Future<void> clearTokens() async {
     final prefs = await SharedPreferences.getInstance();
@@ -113,6 +129,7 @@ class TokenStorageService {
       prefs.remove(_keyRefreshToken),
       prefs.remove(_keyUser),
       prefs.remove(_keyUserRole),
+      prefs.remove(_keyLoggedInUserId),
     ]);
   }
 

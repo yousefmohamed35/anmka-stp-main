@@ -1,11 +1,13 @@
 import 'dart:developer';
 import 'dart:io';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
 import '../core/services/download_manager.dart';
 import '../models/download_model.dart';
-import '../services/token_storage_service.dart';
+import 'profile_service.dart';
+import 'token_storage_service.dart';
 
 class VideoDownloadService {
   static final VideoDownloadService _instance =
@@ -15,10 +17,57 @@ class VideoDownloadService {
 
   static Database? _database;
   static const String _tableName = 'downloaded_videos';
+  static const int _dbVersion = 2;
+  static const String _prefLegacyOwnerAssignedOnce =
+      'offline_downloads_owner_v2_assigned_once';
 
   // Initialize the download service
   Future<void> initialize() async {
     await _initializeDatabase();
+    await _ensureLoggedInUserIdCached();
+    await _assignLegacyDownloadsOwnerOnce();
+  }
+
+  /// Fills [TokenStorageService] user id when the user already had a session
+  /// from before the app stored id on login.
+  Future<void> _ensureLoggedInUserIdCached() async {
+    try {
+      final existing = await TokenStorageService.instance.getLoggedInUserId();
+      if (existing != null && existing.isNotEmpty) return;
+      final token = await TokenStorageService.instance.getAccessToken();
+      if (token == null || token.isEmpty) return;
+      final profile = await ProfileService.instance.getProfile();
+      final id = profile['id']?.toString();
+      if (id != null && id.isNotEmpty) {
+        await TokenStorageService.instance.saveLoggedInUserId(id);
+      }
+    } catch (e) {
+      print('⚠️ _ensureLoggedInUserIdCached: $e');
+    }
+  }
+
+  Future<String?> _loggedInUserId() async {
+    final id = await TokenStorageService.instance.getLoggedInUserId();
+    if (id == null || id.isEmpty) return null;
+    return id;
+  }
+
+  /// One-time: rows created before [owner_user_id] existed are attributed to the
+  /// first signed-in account that opens the DB after upgrade (shared-tablet edge case).
+  Future<void> _assignLegacyDownloadsOwnerOnce() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.getBool(_prefLegacyOwnerAssignedOnce) == true) return;
+      final uid = await _loggedInUserId();
+      if (uid == null || _database == null) return;
+      await _database!.rawUpdate(
+        'UPDATE $_tableName SET owner_user_id = ? WHERE owner_user_id IS NULL',
+        [uid],
+      );
+      await prefs.setBool(_prefLegacyOwnerAssignedOnce, true);
+    } catch (e) {
+      print('❌ _assignLegacyDownloadsOwnerOnce: $e');
+    }
   }
 
   String _sanitizeFileName(String input) {
@@ -38,7 +87,7 @@ class VideoDownloadService {
 
     _database = await openDatabase(
       path,
-      version: 1,
+      version: _dbVersion,
       onCreate: (db, version) {
         return db.execute(
           '''
@@ -58,10 +107,22 @@ class VideoDownloadService {
             duration_text TEXT,
             video_source TEXT,
             downloaded_at TEXT,
-            thumbnail_path TEXT
+            thumbnail_path TEXT,
+            owner_user_id TEXT
           )
           ''',
         );
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          try {
+            await db.execute(
+              'ALTER TABLE $_tableName ADD COLUMN owner_user_id TEXT',
+            );
+          } catch (e) {
+            print('ALTER owner_user_id (may already exist): $e');
+          }
+        }
       },
     );
   }
@@ -86,12 +147,17 @@ class VideoDownloadService {
     Function(int progress)? onProgress,
   }) async {
     try {
+      if (_database == null) {
+        await _initializeDatabase();
+      }
+
       print('🎬 Starting video download with DownloadManager');
       print('Video URL: $videoUrl');
       print('Lesson ID: $lessonId');
 
       // الحصول على token للمصادقة
       final token = await TokenStorageService.instance.getAccessToken();
+      final ownerUserId = await _loggedInUserId();
 
       // إنشاء اسم ملف فريد يعتمد على اسم الكورس واسم الدرس
       final safeCourseTitle =
@@ -141,6 +207,7 @@ class VideoDownloadService {
             'video_source': videoSource ?? 'server',
             'downloaded_at': DateTime.now().toIso8601String(),
             'thumbnail_path': '',
+            'owner_user_id': ownerUserId,
           },
         );
 
@@ -175,6 +242,7 @@ class VideoDownloadService {
       }
 
       final videoId = DateTime.now().millisecondsSinceEpoch.toString();
+      final ownerUserId = await _loggedInUserId();
 
       await _database?.insert(
         _tableName,
@@ -195,6 +263,7 @@ class VideoDownloadService {
           'video_source': videoSource,
           'downloaded_at': DateTime.now().toIso8601String(),
           'thumbnail_path': '',
+          'owner_user_id': ownerUserId,
         },
       );
 
@@ -223,11 +292,17 @@ class VideoDownloadService {
 
   /// التحقق من وجود ملف محمل مسبقاً
   Future<String?> checkLocalVideoFile(String lessonId) async {
+    if (_database == null) {
+      await _initializeDatabase();
+    }
+    final uid = await _loggedInUserId();
+    if (uid == null) return null;
+
     // البحث في قاعدة البيانات أولاً
     final result = await _database?.query(
       _tableName,
-      where: 'lesson_id = ?',
-      whereArgs: [lessonId],
+      where: 'lesson_id = ? AND owner_user_id = ?',
+      whereArgs: [lessonId, uid],
       limit: 1,
     );
 
@@ -244,8 +319,8 @@ class VideoDownloadService {
         // حذف السجل من قاعدة البيانات إذا كان الملف غير موجود
         await _database?.delete(
           _tableName,
-          where: 'lesson_id = ?',
-          whereArgs: [lessonId],
+          where: 'lesson_id = ? AND owner_user_id = ?',
+          whereArgs: [lessonId, uid],
         );
       }
     }
@@ -262,7 +337,17 @@ class VideoDownloadService {
         await _initializeDatabase();
       }
 
-      final results = await _database?.query(_tableName);
+      final uid = await _loggedInUserId();
+      if (uid == null) {
+        print('No logged-in user id; skipping downloaded videos list');
+        return [];
+      }
+
+      final results = await _database?.query(
+        _tableName,
+        where: 'owner_user_id = ?',
+        whereArgs: [uid],
+      );
 
       if (results == null || results.isEmpty) {
         print('No downloaded videos found in database');
@@ -309,8 +394,8 @@ class VideoDownloadService {
           // حذف السجل إذا كان الملف غير موجود
           await _database?.delete(
             _tableName,
-            where: 'id = ?',
-            whereArgs: [row['id']],
+            where: 'id = ? AND owner_user_id = ?',
+            whereArgs: [row['id'], uid],
           );
         }
       }
@@ -326,17 +411,23 @@ class VideoDownloadService {
   /// حذف فيديو محمل
   Future<bool> deleteDownloadedVideo(String videoId) async {
     try {
+      if (_database == null) {
+        await _initializeDatabase();
+      }
+      final uid = await _loggedInUserId();
+      if (uid == null) return false;
+
       // الحصول على معلومات الفيديو من قاعدة البيانات
       final result = await _database?.query(
         _tableName,
-        where: 'id = ?',
-        whereArgs: [videoId],
+        where: 'id = ? AND owner_user_id = ?',
+        whereArgs: [videoId, uid],
         limit: 1,
       );
 
       if (result?.isNotEmpty ?? false) {
         final localPath = result!.first['local_path'] as String;
-        final fileName = localPath.split('/').last;
+        final fileName = basename(localPath);
 
         // حذف الملف من التخزين
         await DownloadManager.deleteFile(fileName);
@@ -344,8 +435,8 @@ class VideoDownloadService {
         // حذف السجل من قاعدة البيانات
         await _database?.delete(
           _tableName,
-          where: 'id = ?',
-          whereArgs: [videoId],
+          where: 'id = ? AND owner_user_id = ?',
+          whereArgs: [videoId, uid],
         );
 
         print('✅ Video deleted successfully');
@@ -360,15 +451,26 @@ class VideoDownloadService {
     }
   }
 
-  /// Deletes every offline lesson video file on this device and clears the local DB.
-  /// Returns how many download records were cleared (same as rows deleted from DB).
+  /// Deletes every offline lesson video for the **currently signed-in student**
+  /// on this device and removes their rows from the local DB.
+  /// Returns how many download records were cleared.
   Future<int> clearAllDownloadedVideos() async {
     try {
       if (_database == null) {
         await _initializeDatabase();
       }
 
-      final results = await _database?.query(_tableName) ?? [];
+      final uid = await _loggedInUserId();
+      if (uid == null) {
+        return 0;
+      }
+
+      final results = await _database?.query(
+            _tableName,
+            where: 'owner_user_id = ?',
+            whereArgs: [uid],
+          ) ??
+          [];
       final rowCount = results.length;
 
       for (final row in results) {
@@ -384,7 +486,11 @@ class VideoDownloadService {
         }
       }
 
-      await _database?.delete(_tableName);
+      await _database?.delete(
+        _tableName,
+        where: 'owner_user_id = ?',
+        whereArgs: [uid],
+      );
       return rowCount;
     } catch (e) {
       print('❌ clearAllDownloadedVideos: $e');
@@ -394,10 +500,16 @@ class VideoDownloadService {
 
   /// التحقق من أن الفيديو محمل
   Future<bool> isVideoDownloaded(String lessonId) async {
+    if (_database == null) {
+      await _initializeDatabase();
+    }
+    final uid = await _loggedInUserId();
+    if (uid == null) return false;
+
     final result = await _database?.query(
       _tableName,
-      where: 'lesson_id = ?',
-      whereArgs: [lessonId],
+      where: 'lesson_id = ? AND owner_user_id = ?',
+      whereArgs: [lessonId, uid],
       limit: 1,
     );
 

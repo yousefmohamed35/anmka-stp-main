@@ -2011,6 +2011,26 @@
         "type": "int"
       }
     }
+  },
+  "mandatoryUpdateTitle": "Update required",
+  "@mandatoryUpdateTitle": {
+    "description": "Title when app version is blocked until update"
+  },
+  "mandatoryUpdateBody": "This version ({current}) is no longer supported. Please install version {required} or newer from the store.",
+  "@mandatoryUpdateBody": {
+    "description": "Explains blocked app version and required version",
+    "placeholders": {
+      "current": { "type": "String" },
+      "required": { "type": "String" }
+    }
+  },
+  "updateNow": "Update now",
+  "@updateNow": {
+    "description": "Button to open app store for update"
+  },
+  "mandatoryUpdateStoreMissing": "Store link is not available. Please update the app from the store you installed it from.",
+  "@mandatoryUpdateStoreMissing": {
+    "description": "Shown when backend did not provide a store URL"
   }
 }
 
